@@ -147,51 +147,59 @@ export class InventoryService {
     };
 
     if (isSupabaseConfigured && navigator.onLine) {
-      try {
-        const { data, error } = await supabase
-          .from('inventory_items')
-          .insert({
-            item_type: newItem.itemType,
-            sku: newItem.sku,
-            name: newItem.name,
-            product_id: newItem.productId || null,
-            set_id: newItem.setId || null,
-            size_id: newItem.sizeId || null,
-            color: newItem.color,
-            unit: newItem.unit,
-            current_stock: newItem.currentStock,
-            minimum_stock_threshold: newItem.minimumStockThreshold,
-            reorder_level: newItem.reorderLevel,
-            unit_cost: newItem.unitCost,
-            storage_location: newItem.storageLocation,
-          })
-          .select()
-          .single();
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .insert({
+          item_type: newItem.itemType,
+          sku: newItem.sku,
+          name: newItem.name,
+          product_id: newItem.productId || null,
+          set_id: newItem.setId || null,
+          size_id: newItem.sizeId || null,
+          color: newItem.color,
+          unit: newItem.unit,
+          current_stock: newItem.currentStock,
+          minimum_stock_threshold: newItem.minimumStockThreshold,
+          reorder_level: newItem.reorderLevel,
+          unit_cost: newItem.unitCost,
+          storage_location: newItem.storageLocation,
+        })
+        .select()
+        .single();
 
-        if (!error && data) {
-          newItem.id = data.id;
+      if (error) {
+        console.error('[Supabase Error] createInventoryItem failed:', error.message, error);
+        throw new Error(`Supabase Error (${error.code || '400'}): ${error.message}`);
+      }
 
-          // Initial opening stock transaction in the immutable ledger
-          if (newItem.currentStock > 0) {
-            await supabase.from('inventory_transactions').insert({
-              item_id: data.id,
-              transaction_type: 'ADJUSTMENT',
-              quantity_change: newItem.currentStock,
-              balance_after: newItem.currentStock,
-              reference_type: 'OPENING_STOCK',
-              notes: 'Initial opening stock ledger entry',
-            });
+      if (data) {
+        newItem.id = data.id;
+
+        // Initial opening stock transaction in the immutable ledger
+        if (newItem.currentStock > 0) {
+          const { error: txErr } = await supabase.from('inventory_transactions').insert({
+            item_id: data.id,
+            transaction_type: 'ADJUSTMENT',
+            quantity_change: newItem.currentStock,
+            balance_after: newItem.currentStock,
+            reference_type: 'OPENING_STOCK',
+            notes: 'Initial opening stock ledger entry',
+          });
+          if (txErr) {
+            console.error('[Supabase Error] Opening stock transaction failed:', txErr.message);
           }
+        }
 
+        try {
           await supabase.from('audit_logs').insert({
             action: 'CREATE_INVENTORY_ITEM',
             entity: 'InventoryItem',
             entity_id: data.id,
             new_value: { name: newItem.name, sku: newItem.sku, stock: newItem.currentStock },
           });
+        } catch (auditErr) {
+          console.warn('Audit log write error:', auditErr);
         }
-      } catch (err) {
-        await LocalStorageManager.enqueueOfflineMutation('inventory', 'INSERT', newItem as unknown as Record<string, unknown>);
       }
     } else {
       await LocalStorageManager.enqueueOfflineMutation('inventory', 'INSERT', newItem as unknown as Record<string, unknown>);
@@ -253,21 +261,31 @@ export class InventoryService {
     };
 
     if (isSupabaseConfigured && navigator.onLine) {
+      const { error: updateErr } = await supabase
+        .from('inventory_items')
+        .update({ current_stock: newBalance, updated_at: item.updatedAt })
+        .eq('id', input.itemId);
+
+      if (updateErr) {
+        console.error('[Supabase Error] recordStockTransaction stock update failed:', updateErr.message);
+        throw new Error(`Supabase Error updating stock balance: ${updateErr.message}`);
+      }
+
+      const { error: txErr } = await supabase.from('inventory_transactions').insert({
+        item_id: input.itemId,
+        transaction_type: input.transactionType,
+        quantity_change: qtyChange,
+        balance_after: newBalance,
+        reference_type: newTx.referenceType,
+        notes: newTx.remarks,
+      });
+
+      if (txErr) {
+        console.error('[Supabase Error] inventory_transactions insert failed:', txErr.message);
+        throw new Error(`Supabase Error writing stock transaction: ${txErr.message}`);
+      }
+
       try {
-        await supabase
-          .from('inventory_items')
-          .update({ current_stock: newBalance, updated_at: item.updatedAt })
-          .eq('id', input.itemId);
-
-        await supabase.from('inventory_transactions').insert({
-          item_id: input.itemId,
-          transaction_type: input.transactionType,
-          quantity_change: qtyChange,
-          balance_after: newBalance,
-          reference_type: newTx.referenceType,
-          notes: newTx.remarks,
-        });
-
         await supabase.from('audit_logs').insert({
           action: 'STOCK_LEDGER_ENTRY',
           entity: 'InventoryItem',
@@ -280,8 +298,8 @@ export class InventoryService {
             reference: newTx.referenceId,
           },
         });
-      } catch (err) {
-        console.warn('Stock transaction sync failed, caching offline:', err);
+      } catch (auditErr) {
+        console.warn('Audit log write error:', auditErr);
       }
     }
 

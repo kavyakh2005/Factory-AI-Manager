@@ -199,8 +199,8 @@ export const ProductionPage: React.FC = () => {
 
       {/* Delayed Orders Alert Bar */}
       {delayedOrders.length > 0 && (
-        <Card className="p-4 border border-rose-500/40 bg-gradient-to-r from-rose-950/40 via-factory-900 to-factory-900 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <Card className="p-3.5 sm:p-4 border border-rose-500/40 bg-gradient-to-r from-rose-950/40 via-factory-900 to-factory-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-start sm:items-center gap-3">
             <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/30 shrink-0">
               <AlertTriangle className="w-5 h-5" />
             </div>
@@ -218,6 +218,7 @@ export const ProductionPage: React.FC = () => {
             size="sm"
             variant="danger"
             onClick={() => handleOpenDetails(delayedOrders[0])}
+            className="w-full sm:w-auto"
           >
             Review Bottleneck
           </Button>

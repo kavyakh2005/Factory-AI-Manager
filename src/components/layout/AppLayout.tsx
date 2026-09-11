@@ -7,6 +7,7 @@ import { Search, ShoppingCart, Factory, Boxes, Layers, Package, ArrowRight } fro
 
 export const AppLayout: React.FC = () => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
 
@@ -38,13 +39,16 @@ export const AppLayout: React.FC = () => {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-factory-950">
       {/* Left Sidebar */}
-      <Sidebar />
+      <Sidebar isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />
 
       {/* Main View Area */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <TopBar onOpenSearch={() => setIsSearchOpen(true)} />
+        <TopBar
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onToggleSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+        />
 
-        <main className="flex-1 overflow-y-auto p-6 bg-factory-950">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 bg-factory-950 min-w-0">
           <Outlet />
         </main>
       </div>

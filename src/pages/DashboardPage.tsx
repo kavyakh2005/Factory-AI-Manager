@@ -67,9 +67,9 @@ export const DashboardPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
-            Factory Command Center
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex flex-wrap items-center gap-2">
+            <span>Factory Command Center</span>
+            <span className="text-[11px] sm:text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
               Shree Raas Krishnam Creation
             </span>
           </h1>
@@ -78,7 +78,7 @@ export const DashboardPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Button
             variant="secondary"
             size="sm"
@@ -86,7 +86,7 @@ export const DashboardPage: React.FC = () => {
             className="flex items-center gap-1.5"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            Refresh Data
+            <span>Refresh</span>
           </Button>
           <Button
             variant="primary"
@@ -95,28 +95,28 @@ export const DashboardPage: React.FC = () => {
             className="flex items-center gap-1.5"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            Ask AI Manager
+            <span>Ask AI Manager</span>
           </Button>
         </div>
       </div>
 
       {/* AI Factory Briefing */}
-      <div className="p-5 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-slate-900 to-slate-900 shadow-xl relative overflow-hidden">
-        <div className="flex items-start gap-4">
-          <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 shrink-0">
-            <Sparkles className="w-6 h-6" />
+      <div className="p-4 sm:p-5 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-slate-900 to-slate-900 shadow-xl relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
+          <div className="p-2.5 sm:p-3 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 shrink-0">
+            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <div className="flex-1 space-y-1.5">
-            <div className="flex items-center justify-between">
+          <div className="flex-1 space-y-1.5 min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-1">
               <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
                 AI Factory Executive Briefing
               </span>
               <span className="text-[10px] text-slate-400">100% Grounded in Live Database</span>
             </div>
-            <h3 className="text-base font-bold text-white">
+            <h3 className="text-sm sm:text-base font-bold text-white break-words">
               {metrics.activeOrdersCount} Active Garment Orders in Progress | {metrics.todayProducedQuantity} Pcs Finished
             </h3>
-            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-2.5 sm:p-3 rounded-xl border border-slate-800 break-words">
               💡 <strong className="text-indigo-300">Action Priority:</strong>{' '}
               {metrics.delayedOrdersCount > 0
                 ? `${metrics.delayedOrdersCount} production batches or orders require attention to meet delivery commitments.`

@@ -255,15 +255,15 @@ export const SizeMatrixInput: React.FC<SizeMatrixInputProps> = ({
       {/* Dynamic Size Matrix Grid */}
       {selectedSet && availableSizes.length > 0 ? (
         <div className="space-y-2 pt-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
               <span>Size Matrix Quantity Breakdown</span>
               <span className="text-slate-500 text-[10px]">({selectedSet.name})</span>
             </span>
 
             {/* Quick Set Multiplier Preset */}
-            <div className="flex items-center gap-1 text-[10px] text-slate-400">
-              <Sparkles className="w-3 h-3 text-amber-400" />
+            <div className="flex items-center gap-1 text-[10px] text-slate-400 shrink-0">
+              <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
               <span>Quick Fill:</span>
               {[25, 50, 100].map((val) => (
                 <button
@@ -278,21 +278,21 @@ export const SizeMatrixInput: React.FC<SizeMatrixInputProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
             {availableSizes.map((ss) => {
               const qty = item.sizeQuantities[ss.sizeId] || 0;
               return (
                 <div
                   key={ss.sizeId}
-                  className={`p-2.5 rounded-lg border text-center transition-all ${
+                  className={`p-2 sm:p-2.5 rounded-lg border text-center transition-all ${
                     qty > 0
                       ? 'bg-primary-950/40 border-primary-500/50 shadow-sm'
                       : 'bg-factory-900/80 border-slate-800'
                   }`}
                 >
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-300 mb-1 px-1">
-                    <span>Size {ss.size?.name}</span>
-                    <span className="text-[10px] text-slate-500">#{ss.sequence}</span>
+                    <span className="truncate">Size {ss.size?.name}</span>
+                    <span className="text-[10px] text-slate-500 shrink-0">#{ss.sequence}</span>
                   </div>
                   <input
                     type="number"
@@ -308,21 +308,21 @@ export const SizeMatrixInput: React.FC<SizeMatrixInputProps> = ({
           </div>
 
           {/* Line Item Calculation Bar */}
-          <div className="flex flex-wrap items-center justify-between p-3 rounded-lg bg-factory-900/60 border border-slate-800 text-xs mt-2">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between p-2.5 sm:p-3 rounded-lg bg-factory-900/60 border border-slate-800 text-xs mt-2 gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <span className="text-slate-400">
                 Item Total: <strong className="text-slate-100 font-bold">{rowTotalPcs} pcs</strong>
               </span>
-              <span className="text-slate-600">•</span>
+              <span className="text-slate-600 hidden sm:inline">•</span>
               <span className="text-slate-400">
                 Rate: <strong className="text-slate-200">₹{item.unitRate}</strong>
               </span>
-              <span className="text-slate-600">•</span>
+              <span className="text-slate-600 hidden sm:inline">•</span>
               <span className="text-slate-400">
                 Tax: <strong className="text-slate-200">{item.taxRate || 5}%</strong>
               </span>
             </div>
-            <div className="text-right">
+            <div className="text-right ml-auto sm:ml-0">
               <span className="text-slate-400 text-[11px]">Line Total: </span>
               <span className="text-emerald-400 font-black text-sm">
                 ₹{lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

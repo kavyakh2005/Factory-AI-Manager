@@ -603,8 +603,7 @@ export class ProductService {
       }),
     };
 
-    if (isSupabaseConfigured && navigator.onLine) {
-      try {
+      if (isSupabaseConfigured && navigator.onLine) {
         const { data: dbSet, error: setErr } = await supabase
           .from('sets')
           .insert({
@@ -618,7 +617,11 @@ export class ProductService {
           .select()
           .single();
 
-        if (setErr) throw setErr;
+        if (setErr) {
+          console.error('[Supabase Error] createSet failed:', setErr.message, setErr);
+          throw new Error(`Supabase Error (${setErr.code || '400'}): ${setErr.message}`);
+        }
+
         if (dbSet) {
           newSet.id = dbSet.id;
           if (input.sizeIds && input.sizeIds.length > 0) {
@@ -628,21 +631,25 @@ export class ProductService {
               sequence: idx + 1,
               ratio: 1,
             }));
-            await supabase.from('set_sizes').insert(setSizeInserts);
+            const { error: ssErr } = await supabase.from('set_sizes').insert(setSizeInserts);
+            if (ssErr) {
+              console.error('[Supabase Error] set_sizes insert failed:', ssErr.message, ssErr);
+              throw new Error(`Supabase Error inserting set sizes: ${ssErr.message}`);
+            }
           }
 
           // Audit Log
-          await supabase.from('audit_logs').insert({
-            action: 'CREATE_SET',
-            entity: 'Set',
-            entity_id: dbSet.id,
-            new_value: { name: newSet.name, code: newSet.code },
-          });
+          try {
+            await supabase.from('audit_logs').insert({
+              action: 'CREATE_SET',
+              entity: 'Set',
+              entity_id: dbSet.id,
+              new_value: { name: newSet.name, code: newSet.code },
+            });
+          } catch (auditErr) {
+            console.warn('Audit log write error:', auditErr);
+          }
         }
-      } catch (err) {
-        console.warn('Supabase set insert error, queuing locally:', err);
-        await LocalStorageManager.enqueueOfflineMutation('sets', 'INSERT', newSet as unknown as Record<string, unknown>);
-      }
     } else {
       await LocalStorageManager.enqueueOfflineMutation('sets', 'INSERT', newSet as unknown as Record<string, unknown>);
     }
@@ -654,8 +661,21 @@ export class ProductService {
 
   // Update Set & Assigned Sizes
   static async updateSet(id: string, input: Partial<CreateSetInput>): Promise<GarmentSet> {
-    const set = localSetsMemory.find((s) => s.id === id);
-    if (!set) throw new Error('Set not found.');
+    let set = localSetsMemory.find((s) => s.id === id);
+    if (!set) {
+      set = {
+        id,
+        name: input.name?.trim() || 'Updated Set',
+        code: input.code?.trim().toUpperCase() || 'SET-UPDATED',
+        type: input.type || 'ADULT',
+        description: input.description?.trim(),
+        status: input.status || 'ACTIVE',
+        sortOrder: input.sortOrder || 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      localSetsMemory.push(set);
+    }
 
     if (input.name !== undefined) set.name = input.name.trim();
     if (input.code !== undefined) set.code = input.code.trim().toUpperCase();
@@ -681,43 +701,50 @@ export class ProductService {
     set.updatedAt = new Date().toISOString();
 
     if (isSupabaseConfigured && navigator.onLine) {
-      try {
-        await supabase
-          .from('sets')
-          .update({
-            name: set.name,
-            code: set.code,
-            type: set.type,
-            description: set.description,
-            status: set.status,
-            sort_order: set.sortOrder,
-            updated_at: set.updatedAt,
-          })
-          .eq('id', id);
+      const { error: updateErr } = await supabase
+        .from('sets')
+        .update({
+          name: set.name,
+          code: set.code,
+          type: set.type,
+          description: set.description,
+          status: set.status,
+          sort_order: set.sortOrder,
+          updated_at: set.updatedAt,
+        })
+        .eq('id', id);
 
-        if (input.sizeIds !== undefined) {
-          await supabase.from('set_sizes').delete().eq('set_id', id);
-          if (input.sizeIds.length > 0) {
-            const setSizeInserts = input.sizeIds.map((sizeId, idx) => ({
-              set_id: id,
-              size_id: sizeId,
-              sequence: idx + 1,
-              ratio: 1,
-            }));
-            await supabase.from('set_sizes').insert(setSizeInserts);
+      if (updateErr) {
+        console.error('[Supabase Error] updateSet failed:', updateErr.message, updateErr);
+        throw new Error(`Supabase Error (${updateErr.code || '400'}): ${updateErr.message}`);
+      }
+
+      if (input.sizeIds !== undefined) {
+        await supabase.from('set_sizes').delete().eq('set_id', id);
+        if (input.sizeIds.length > 0) {
+          const setSizeInserts = input.sizeIds.map((sizeId, idx) => ({
+            set_id: id,
+            size_id: sizeId,
+            sequence: idx + 1,
+            ratio: 1,
+          }));
+          const { error: ssErr } = await supabase.from('set_sizes').insert(setSizeInserts);
+          if (ssErr) {
+            console.error('[Supabase Error] set_sizes update failed:', ssErr.message, ssErr);
           }
         }
+      }
 
-        // Audit Log
+      // Audit Log
+      try {
         await supabase.from('audit_logs').insert({
           action: 'UPDATE_SET',
           entity: 'Set',
           entity_id: id,
           new_value: { name: set.name, code: set.code, sizeCount: input.sizeIds?.length },
         });
-      } catch (err) {
-        console.warn('Supabase set update error, queuing locally:', err);
-        await LocalStorageManager.enqueueOfflineMutation('sets', 'UPDATE', set as unknown as Record<string, unknown>);
+      } catch (auditErr) {
+        console.warn('Audit log write error:', auditErr);
       }
     } else {
       await LocalStorageManager.enqueueOfflineMutation('sets', 'UPDATE', set as unknown as Record<string, unknown>);
@@ -740,7 +767,15 @@ export class ProductService {
           .select('*')
           .order('created_at', { ascending: true });
 
-        if (!error && data && data.length > 0) {
+        if (error) {
+          console.error('[Supabase Error] getSizes failed:', error.message, error);
+          if (!navigator.onLine) {
+            return localSizesMemory;
+          }
+          throw new Error(`Failed to load sizes from Supabase: ${error.message}`);
+        }
+
+        if (data && data.length > 0) {
           const mapped: Size[] = data.map((sz: any) => ({
             id: sz.id,
             name: sz.name,
@@ -760,7 +795,7 @@ export class ProductService {
         }
 
         // If Supabase table is empty, auto-seed standard sizes into Supabase
-        if (!error && (!data || data.length === 0)) {
+        if (!data || data.length === 0) {
           try {
             const inserts = DEFAULT_FACTORY_SIZES.map((s) => ({
               name: s.name,
@@ -775,8 +810,11 @@ export class ProductService {
             console.warn('Auto-seed sizes warning:', seedErr);
           }
         }
-      } catch (err) {
-        console.warn('Supabase sizes query error, using local fallback:', err);
+      } catch (err: any) {
+        console.error('Supabase sizes query error:', err);
+        if (navigator.onLine && err?.message?.includes('Supabase')) {
+          throw err;
+        }
       }
     }
 
@@ -809,34 +847,36 @@ export class ProductService {
     };
 
     if (isSupabaseConfigured && navigator.onLine) {
-      try {
-        const { data: dbSize, error: sizeErr } = await supabase
-          .from('sizes')
-          .insert({
-            name: newSize.name,
-            code: newSize.code,
-            chest_measure: newSize.chestMeasure,
-            waist_measure: newSize.waistMeasure,
-            length_measure: newSize.lengthMeasure,
-            status: newSize.status,
-          })
-          .select()
-          .single();
+      const { data: dbSize, error: sizeErr } = await supabase
+        .from('sizes')
+        .insert({
+          name: newSize.name,
+          code: newSize.code,
+          chest_measure: newSize.chestMeasure,
+          waist_measure: newSize.waistMeasure,
+          length_measure: newSize.lengthMeasure,
+          status: newSize.status,
+        })
+        .select()
+        .single();
 
-        if (sizeErr) throw sizeErr;
-        if (dbSize) {
-          newSize.id = dbSize.id;
-          // Audit Log
+      if (sizeErr) {
+        console.error('[Supabase Error] createSize failed:', sizeErr.message, sizeErr);
+        throw new Error(`Supabase Error (${sizeErr.code || '400'}): ${sizeErr.message}`);
+      }
+
+      if (dbSize) {
+        newSize.id = dbSize.id;
+        try {
           await supabase.from('audit_logs').insert({
             action: 'CREATE_SIZE',
             entity: 'Size',
             entity_id: dbSize.id,
             new_value: { name: newSize.name, code: newSize.code },
           });
+        } catch (auditErr) {
+          console.warn('Audit log write error:', auditErr);
         }
-      } catch (err) {
-        console.warn('Supabase size insert error, queuing locally:', err);
-        await LocalStorageManager.enqueueOfflineMutation('sizes', 'INSERT', newSize as unknown as Record<string, unknown>);
       }
     } else {
       await LocalStorageManager.enqueueOfflineMutation('sizes', 'INSERT', newSize as unknown as Record<string, unknown>);
@@ -849,8 +889,22 @@ export class ProductService {
 
   // Update Size
   static async updateSize(id: string, input: Partial<CreateSizeInput>): Promise<Size> {
-    const size = localSizesMemory.find((sz) => sz.id === id);
-    if (!size) throw new Error('Size not found.');
+    let size = localSizesMemory.find((sz) => sz.id === id);
+    if (!size) {
+      size = {
+        id,
+        name: input.name?.trim() || 'Updated Size',
+        code: input.code?.trim().toUpperCase() || `SZ-${id}`,
+        chestMeasure: input.chestMeasure,
+        waistMeasure: input.waistMeasure,
+        lengthMeasure: input.lengthMeasure,
+        status: input.status || 'ACTIVE',
+        sortOrder: input.sortOrder || 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      localSizesMemory.push(size);
+    }
 
     if (input.name !== undefined) size.name = input.name.trim();
     if (input.code !== undefined) size.code = input.code.trim().toUpperCase();
@@ -863,30 +917,33 @@ export class ProductService {
     size.updatedAt = new Date().toISOString();
 
     if (isSupabaseConfigured && navigator.onLine) {
-      try {
-        await supabase
-          .from('sizes')
-          .update({
-            name: size.name,
-            code: size.code,
-            chest_measure: size.chestMeasure,
-            waist_measure: size.waistMeasure,
-            length_measure: size.lengthMeasure,
-            status: size.status,
-            updated_at: size.updatedAt,
-          })
-          .eq('id', id);
+      const { error: updateErr } = await supabase
+        .from('sizes')
+        .update({
+          name: size.name,
+          code: size.code,
+          chest_measure: size.chestMeasure,
+          waist_measure: size.waistMeasure,
+          length_measure: size.lengthMeasure,
+          status: size.status,
+          updated_at: size.updatedAt,
+        })
+        .eq('id', id);
 
-        // Audit Log
+      if (updateErr) {
+        console.error('[Supabase Error] updateSize failed:', updateErr.message, updateErr);
+        throw new Error(`Supabase Error (${updateErr.code || '400'}): ${updateErr.message}`);
+      }
+
+      try {
         await supabase.from('audit_logs').insert({
           action: 'UPDATE_SIZE',
           entity: 'Size',
           entity_id: id,
           new_value: { name: size.name, status: size.status },
         });
-      } catch (err) {
-        console.warn('Supabase size update error, queuing locally:', err);
-        await LocalStorageManager.enqueueOfflineMutation('sizes', 'UPDATE', size as unknown as Record<string, unknown>);
+      } catch (auditErr) {
+        console.warn('Audit log write error:', auditErr);
       }
     } else {
       await LocalStorageManager.enqueueOfflineMutation('sizes', 'UPDATE', size as unknown as Record<string, unknown>);

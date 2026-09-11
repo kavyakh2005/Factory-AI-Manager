@@ -84,32 +84,37 @@ export class ExpenseService {
     };
 
     if (isSupabaseConfigured && navigator.onLine) {
-      try {
-        const { data, error } = await supabase
-          .from('expenses')
-          .insert({
-            expense_category: newExp.expenseCategory,
-            title: newExp.title,
-            amount: newExp.amount,
-            expense_date: newExp.expenseDate,
-            paid_to: newExp.paidTo,
-            receipt_image: newExp.receiptImage,
-            notes: newExp.notes,
-          })
-          .select()
-          .single();
+      const { data, error } = await supabase
+        .from('expenses')
+        .insert({
+          expense_category: newExp.expenseCategory,
+          title: newExp.title,
+          amount: newExp.amount,
+          expense_date: newExp.expenseDate,
+          paid_to: newExp.paidTo,
+          receipt_image: newExp.receiptImage,
+          notes: newExp.notes,
+        })
+        .select()
+        .single();
 
-        if (!error && data) {
-          newExp.id = data.id;
+      if (error) {
+        console.error('[Supabase Error] createExpense failed:', error.message, error);
+        throw new Error(`Supabase Error (${error.code || '400'}): ${error.message}`);
+      }
+
+      if (data) {
+        newExp.id = data.id;
+        try {
           await supabase.from('audit_logs').insert({
             action: 'CREATE_EXPENSE',
             entity: 'Expense',
             entity_id: data.id,
             new_value: { title: newExp.title, amount: newExp.amount, category: newExp.expenseCategory },
           });
+        } catch (auditErr) {
+          console.warn('Audit log write error:', auditErr);
         }
-      } catch (err) {
-        await LocalStorageManager.enqueueOfflineMutation('expenses', 'INSERT', newExp as unknown as Record<string, unknown>);
       }
     } else {
       await LocalStorageManager.enqueueOfflineMutation('expenses', 'INSERT', newExp as unknown as Record<string, unknown>);

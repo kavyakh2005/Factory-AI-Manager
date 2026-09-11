@@ -195,7 +195,7 @@ export const CustomersPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-700 flex justify-end gap-2">
+              <div className="mt-4 pt-3 border-t border-slate-700 flex flex-wrap justify-end gap-2">
                 <Button
                   variant="secondary"
                   size="sm"

@@ -149,7 +149,8 @@ export const ExpensesPage: React.FC = () => {
         </div>
       ) : (
         <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-900/40">
-          <table className="w-full text-left text-sm text-slate-300">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-300">
             <thead className="bg-slate-800/80 text-xs uppercase font-medium text-slate-400 border-b border-slate-700">
               <tr>
                 <th className="p-4">Date</th>
@@ -183,6 +184,7 @@ export const ExpensesPage: React.FC = () => {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

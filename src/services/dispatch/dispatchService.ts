@@ -99,39 +99,48 @@ export class DispatchService {
     };
 
     if (isSupabaseConfigured && navigator.onLine) {
-      try {
-        const { data: dbDsp, error: dspErr } = await supabase
-          .from('dispatches')
-          .insert({
-            dispatch_number: newDispatch.dispatchNumber,
-            order_id: newDispatch.orderId,
-            customer_id: newDispatch.customerId,
-            dispatch_date: newDispatch.dispatchDate,
-            packing_status: newDispatch.packingStatus,
-            carrier_name: newDispatch.carrierName,
-            tracking_number: newDispatch.trackingNumber,
-            vehicle_number: newDispatch.vehicleNumber,
-            delivery_status: newDispatch.deliveryStatus,
-            total_packages: newDispatch.totalPackages,
-            total_items_count: newDispatch.totalItemsCount,
-            notes: newDispatch.notes,
-          })
-          .select()
-          .single();
+      const { data: dbDsp, error: dspErr } = await supabase
+        .from('dispatches')
+        .insert({
+          dispatch_number: newDispatch.dispatchNumber,
+          order_id: newDispatch.orderId,
+          customer_id: newDispatch.customerId,
+          dispatch_date: newDispatch.dispatchDate,
+          packing_status: newDispatch.packingStatus,
+          carrier_name: newDispatch.carrierName,
+          tracking_number: newDispatch.trackingNumber,
+          vehicle_number: newDispatch.vehicleNumber,
+          delivery_status: newDispatch.deliveryStatus,
+          total_packages: newDispatch.totalPackages,
+          total_items_count: newDispatch.totalItemsCount,
+          notes: newDispatch.notes,
+        })
+        .select()
+        .single();
 
-        if (!dspErr && dbDsp) {
-          newDispatch.id = dbDsp.id;
+      if (dspErr) {
+        console.error('[Supabase Error] createDispatch failed:', dspErr.message, dspErr);
+        throw new Error(`Supabase Error (${dspErr.code || '400'}): ${dspErr.message}`);
+      }
 
-          // Update order status to COMPLETED
+      if (dbDsp) {
+        newDispatch.id = dbDsp.id;
+
+        // Update order status to COMPLETED
+        try {
           await OrderService.updateOrderStatus(input.orderId, 'COMPLETED');
+        } catch (orderErr) {
+          console.warn('Order status update warning:', orderErr);
+        }
 
-          // Record Finished Goods OUT movement in immutable Inventory Ledger
+        // Record Finished Goods OUT movement in immutable Inventory Ledger
+        try {
           const invItems = await InventoryService.getInventoryItems({ itemType: 'FINISHED_GOODS' });
           if (invItems.length > 0) {
-            await InventoryService.recordStockMovement({
+            await InventoryService.recordStockTransaction({
               itemId: invItems[0].id,
               transactionType: 'OUT',
-              quantity: newDispatch.totalItemsCount,
+              quantityChange: -newDispatch.totalItemsCount,
               unit: 'pcs',
               referenceType: 'DISPATCH',
               referenceId: newDispatch.dispatchNumber,
@@ -139,8 +148,12 @@ export class DispatchService {
               remarks: `Dispatched ${newDispatch.totalPackages} cartons to ${order?.customer?.name || 'Customer'} via ${newDispatch.carrierName || 'Courier'} (LR: ${newDispatch.trackingNumber || 'N/A'})`,
             });
           }
+        } catch (invErr) {
+          console.warn('Inventory dispatch ledger warning:', invErr);
+        }
 
-          // Audit Log
+        // Audit Log
+        try {
           await supabase.from('audit_logs').insert({
             action: 'CREATE_DISPATCH',
             entity: 'Dispatch',
@@ -152,9 +165,9 @@ export class DispatchService {
               packages: newDispatch.totalPackages,
             },
           });
+        } catch (auditErr) {
+          console.warn('Audit log write error:', auditErr);
         }
-      } catch (err) {
-        await LocalStorageManager.enqueueOfflineMutation('dispatches', 'INSERT', newDispatch as unknown as Record<string, unknown>);
       }
     } else {
       await LocalStorageManager.enqueueOfflineMutation('dispatches', 'INSERT', newDispatch as unknown as Record<string, unknown>);

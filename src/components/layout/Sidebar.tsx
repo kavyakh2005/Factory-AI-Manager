@@ -49,21 +49,28 @@ const navItems: NavItem[] = [
   { label: 'Settings', path: '/settings', icon: <Settings className="w-4 h-4" />, module: 'SETTINGS' },
 ];
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { hasPermission } = useAuthStore();
 
-  return (
-    <aside className="w-64 bg-factory-900 border-r border-slate-800 flex flex-col shrink-0 select-none h-screen overflow-hidden">
+  const sidebarContent = (
+    <aside className="w-64 bg-factory-900 border-r border-slate-800 flex flex-col shrink-0 select-none h-full overflow-hidden">
       {/* Brand Header */}
-      <div className="h-16 flex items-center gap-3 px-5 border-b border-slate-800 bg-factory-950/70">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-primary-600 to-emerald-500 flex items-center justify-center text-white font-black shadow-lg shadow-indigo-500/20">
-          <Factory className="w-5 h-5" />
-        </div>
-        <div>
-          <div className="text-sm font-extrabold tracking-tight text-white flex items-center gap-1.5">
-            FACTORY AI <span className="text-emerald-400 text-xs px-1.5 py-0.2 bg-emerald-500/10 rounded border border-emerald-500/30">PRO</span>
+      <div className="h-16 flex items-center justify-between px-5 border-b border-slate-800 bg-factory-950/70 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-primary-600 to-emerald-500 flex items-center justify-center text-white font-black shadow-lg shadow-indigo-500/20 shrink-0">
+            <Factory className="w-5 h-5" />
           </div>
-          <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Garment Operations</div>
+          <div>
+            <div className="text-sm font-extrabold tracking-tight text-white flex items-center gap-1.5">
+              FACTORY AI <span className="text-emerald-400 text-[10px] px-1.5 py-0.2 bg-emerald-500/10 rounded border border-emerald-500/30">PRO</span>
+            </div>
+            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Garment Operations</div>
+          </div>
         </div>
       </div>
 
@@ -77,6 +84,9 @@ export const Sidebar: React.FC = () => {
             <NavLink
               key={item.path}
               to={item.path}
+              onClick={() => {
+                if (onClose) onClose();
+              }}
               className={({ isActive }) =>
                 `flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150 ${
                   isActive
@@ -87,21 +97,21 @@ export const Sidebar: React.FC = () => {
                 }`
               }
             >
-              <div className="flex items-center gap-2.5">
-                <span className={item.isAi ? 'text-emerald-400' : 'text-slate-400'}>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className={item.isAi ? 'text-emerald-400 shrink-0' : 'text-slate-400 shrink-0'}>
                   {item.icon}
                 </span>
-                <span>{item.label}</span>
+                <span className="truncate">{item.label}</span>
               </div>
 
               {item.badge && (
-                <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-primary-500/20 text-primary-300 border border-primary-500/30">
+                <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-primary-500/20 text-primary-300 border border-primary-500/30 shrink-0">
                   {item.badge}
                 </span>
               )}
 
               {item.isAi && (
-                <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
                   <Sparkles className="w-2.5 h-2.5" /> AI
                 </span>
               )}
@@ -111,13 +121,35 @@ export const Sidebar: React.FC = () => {
       </nav>
 
       {/* System Status Footer */}
-      <div className="p-3 border-t border-slate-800 bg-factory-950/40 text-[11px] text-slate-400 flex items-center justify-between">
+      <div className="p-3 border-t border-slate-800 bg-factory-950/40 text-[11px] text-slate-400 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-slate-300 font-medium">Factory Online</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <span className="text-slate-300 font-medium truncate">Factory Online</span>
         </div>
-        <span className="text-slate-500">v1.0.0</span>
+        <span className="text-slate-500 shrink-0">v1.0.0</span>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* Desktop Persistent Sidebar */}
+      <div className="hidden lg:flex h-screen shrink-0">
+        {sidebarContent}
+      </div>
+
+      {/* Mobile Drawer Overlay */}
+      {isOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
+            onClick={onClose}
+          />
+          <div className="relative z-10 flex h-full max-w-[80vw] shadow-2xl animate-in slide-in-from-left duration-200">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
   );
 };

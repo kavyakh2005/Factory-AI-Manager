@@ -180,7 +180,7 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
                 Track exact pieces planned during order booking vs passed in current manufacturing stage
               </span>
             </div>
-            <div className="flex items-center gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs w-full sm:w-auto">
               <button
                 type="button"
                 onClick={() => {
@@ -201,8 +201,10 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
               >
                 ⚡ Autofill Remaining Target
               </button>
-              <span className="text-emerald-400 font-bold">Passed: {totalPassedBatch} pcs</span>
-              <span className="text-rose-400 font-bold">Rejected: {totalRejectedBatch} pcs</span>
+              <div className="flex items-center gap-2 text-[11px] ml-auto sm:ml-0">
+                <span className="text-emerald-400 font-bold">Passed: {totalPassedBatch} pcs</span>
+                <span className="text-rose-400 font-bold">Rejected: {totalRejectedBatch} pcs</span>
+              </div>
             </div>
           </div>
 

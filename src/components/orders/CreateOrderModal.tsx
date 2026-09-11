@@ -311,7 +311,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
 
           {/* Items & Dynamic Size Matrices */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
                   Garment Products & Size Matrix Items ({items.length})
@@ -327,6 +327,7 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
                 size="sm"
                 onClick={handleAddItem}
                 icon={<Plus className="w-3.5 h-3.5" />}
+                className="self-start sm:self-auto"
               >
                 Add Another Product / Set
               </Button>

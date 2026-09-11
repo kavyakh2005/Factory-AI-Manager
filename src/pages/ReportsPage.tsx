@@ -152,49 +152,49 @@ export const ReportsPage: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-800">
+      <div className="flex border-b border-slate-800 overflow-x-auto pb-1">
         <button
           onClick={() => setActiveTab('SALES')}
-          className={`pb-3 px-4 text-sm font-semibold flex items-center gap-2 border-b-2 transition ${
+          className={`pb-2.5 px-3 sm:px-4 text-xs sm:text-sm font-semibold flex items-center gap-2 border-b-2 transition whitespace-nowrap ${
             activeTab === 'SALES'
               ? 'border-indigo-500 text-indigo-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <ShoppingBag className="w-4 h-4" />
+          <ShoppingBag className="w-4 h-4 shrink-0" />
           Sales & Order Volume
         </button>
         <button
           onClick={() => setActiveTab('PRODUCTION')}
-          className={`pb-3 px-4 text-sm font-semibold flex items-center gap-2 border-b-2 transition ${
+          className={`pb-2.5 px-3 sm:px-4 text-xs sm:text-sm font-semibold flex items-center gap-2 border-b-2 transition whitespace-nowrap ${
             activeTab === 'PRODUCTION'
               ? 'border-indigo-500 text-indigo-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Factory className="w-4 h-4" />
+          <Factory className="w-4 h-4 shrink-0" />
           Production & Defects
         </button>
         <button
           onClick={() => setActiveTab('INVENTORY')}
-          className={`pb-3 px-4 text-sm font-semibold flex items-center gap-2 border-b-2 transition ${
+          className={`pb-2.5 px-3 sm:px-4 text-xs sm:text-sm font-semibold flex items-center gap-2 border-b-2 transition whitespace-nowrap ${
             activeTab === 'INVENTORY'
               ? 'border-indigo-500 text-indigo-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Layers className="w-4 h-4" />
+          <Layers className="w-4 h-4 shrink-0" />
           Inventory Valuation
         </button>
         <button
           onClick={() => setActiveTab('CASHFLOW')}
-          className={`pb-3 px-4 text-sm font-semibold flex items-center gap-2 border-b-2 transition ${
+          className={`pb-2.5 px-3 sm:px-4 text-xs sm:text-sm font-semibold flex items-center gap-2 border-b-2 transition whitespace-nowrap ${
             activeTab === 'CASHFLOW'
               ? 'border-indigo-500 text-indigo-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <IndianRupee className="w-4 h-4" />
+          <IndianRupee className="w-4 h-4 shrink-0" />
           Cashflow & Profitability
         </button>
       </div>
@@ -206,7 +206,7 @@ export const ReportsPage: React.FC = () => {
           {/* TAB 1: SALES & ORDERS */}
           {activeTab === 'SALES' && salesReport && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-xl">
                   <p className="text-xs text-slate-400">Total Orders in Range</p>
                   <p className="text-2xl font-bold text-white mt-1">{salesReport.totalOrders}</p>
@@ -236,7 +236,8 @@ export const ReportsPage: React.FC = () => {
                 <div className="p-4 border-b border-slate-800 font-semibold text-white text-sm">
                   Customer-Wise Revenue Breakdown
                 </div>
-                <table className="w-full text-left text-sm text-slate-300">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-300">
                   <thead className="bg-slate-800/80 text-xs uppercase font-medium text-slate-400 border-b border-slate-700">
                     <tr>
                       <th className="p-3">Customer / Buyer</th>
@@ -260,6 +261,7 @@ export const ReportsPage: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
@@ -299,7 +301,8 @@ export const ReportsPage: React.FC = () => {
                 <div className="p-4 border-b border-slate-800 font-semibold text-white text-sm">
                   Stage-Wise Production Output
                 </div>
-                <table className="w-full text-left text-sm text-slate-300">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-300">
                   <thead className="bg-slate-800/80 text-xs uppercase font-medium text-slate-400 border-b border-slate-700">
                     <tr>
                       <th className="p-3">Production Stage</th>
@@ -327,6 +330,7 @@ export const ReportsPage: React.FC = () => {
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
@@ -334,7 +338,7 @@ export const ReportsPage: React.FC = () => {
           {/* TAB 3: INVENTORY */}
           {activeTab === 'INVENTORY' && invReport && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-xl">
                   <p className="text-xs text-slate-400">Total Inventory Valuation</p>
                   <p className="text-2xl font-bold text-emerald-400 mt-1">
@@ -366,7 +370,8 @@ export const ReportsPage: React.FC = () => {
                 <div className="p-4 border-b border-slate-800 font-semibold text-white text-sm">
                   SKU-Wise Stock Balance & Valuation
                 </div>
-                <table className="w-full text-left text-sm text-slate-300">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-300">
                   <thead className="bg-slate-800/80 text-xs uppercase font-medium text-slate-400 border-b border-slate-700">
                     <tr>
                       <th className="p-3">Item / Material Description</th>
@@ -390,6 +395,7 @@ export const ReportsPage: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}

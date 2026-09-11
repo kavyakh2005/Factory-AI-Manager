@@ -107,49 +107,62 @@ export class PaymentService {
     };
 
     if (isSupabaseConfigured && navigator.onLine) {
-      try {
-        const { data: dbPay, error: payErr } = await supabase
-          .from('payments')
-          .insert({
-            payment_number: newPayment.paymentNumber,
-            payment_type: newPayment.paymentType,
-            customer_id: newPayment.customerId || null,
-            supplier_id: newPayment.supplierId || null,
-            order_id: newPayment.orderId || null,
-            purchase_order_id: newPayment.purchaseOrderId || null,
-            amount: newPayment.amount,
-            payment_date: newPayment.paymentDate,
-            payment_mode: newPayment.paymentMode,
-            transaction_reference: newPayment.transactionReference,
-            status: newPayment.status,
-            notes: newPayment.notes,
-          })
-          .select()
-          .single();
+      const { data: dbPay, error: payErr } = await supabase
+        .from('payments')
+        .insert({
+          payment_number: newPayment.paymentNumber,
+          payment_type: newPayment.paymentType,
+          customer_id: newPayment.customerId || null,
+          supplier_id: newPayment.supplierId || null,
+          order_id: newPayment.orderId || null,
+          purchase_order_id: newPayment.purchaseOrderId || null,
+          amount: newPayment.amount,
+          payment_date: newPayment.paymentDate,
+          payment_mode: newPayment.paymentMode,
+          transaction_reference: newPayment.transactionReference,
+          status: newPayment.status,
+          notes: newPayment.notes,
+        })
+        .select()
+        .single();
 
-        if (!payErr && dbPay) {
-          newPayment.id = dbPay.id;
+      if (payErr) {
+        console.error('[Supabase Error] createPayment failed:', payErr.message, payErr);
+        throw new Error(`Supabase Error (${payErr.code || '400'}): ${payErr.message}`);
+      }
 
-          // If linked to an order, update paid_amount
-          if (input.orderId) {
+      if (dbPay) {
+        newPayment.id = dbPay.id;
+
+        // If linked to an order, update paid_amount
+        if (input.orderId) {
+          try {
             const { data: orderData } = await supabase.from('orders').select('paid_amount, grand_total').eq('id', input.orderId).single();
             if (orderData) {
               const updatedPaid = (orderData.paid_amount || 0) + newPayment.amount;
               const payStatus = updatedPaid >= orderData.grand_total ? 'PAID' : updatedPaid > 0 ? 'PARTIAL' : 'UNPAID';
               await supabase.from('orders').update({ paid_amount: updatedPaid, payment_status: payStatus }).eq('id', input.orderId);
             }
+          } catch (orderErr) {
+            console.warn('Order payment status update warning:', orderErr);
           }
+        }
 
-          // If linked to a purchase order, update paid_amount
-          if (input.purchaseOrderId) {
+        // If linked to a purchase order, update paid_amount
+        if (input.purchaseOrderId) {
+          try {
             const { data: poData } = await supabase.from('purchase_orders').select('paid_amount, total_amount').eq('id', input.purchaseOrderId).single();
             if (poData) {
               const updatedPaid = (poData.paid_amount || 0) + newPayment.amount;
               const payStatus = updatedPaid >= poData.total_amount ? 'PAID' : updatedPaid > 0 ? 'PARTIAL' : 'UNPAID';
               await supabase.from('purchase_orders').update({ paid_amount: updatedPaid, payment_status: payStatus }).eq('id', input.purchaseOrderId);
             }
+          } catch (poErr) {
+            console.warn('PO payment status update warning:', poErr);
           }
+        }
 
+        try {
           await supabase.from('audit_logs').insert({
             action: 'CREATE_PAYMENT',
             entity: 'Payment',
@@ -161,9 +174,9 @@ export class PaymentService {
               mode: newPayment.paymentMode,
             },
           });
+        } catch (auditErr) {
+          console.warn('Audit log write error:', auditErr);
         }
-      } catch (err) {
-        await LocalStorageManager.enqueueOfflineMutation('payments', 'INSERT', newPayment as unknown as Record<string, unknown>);
       }
     } else {
       await LocalStorageManager.enqueueOfflineMutation('payments', 'INSERT', newPayment as unknown as Record<string, unknown>);
