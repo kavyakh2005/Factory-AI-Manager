@@ -100,6 +100,21 @@ export const StageKanbanPipeline: React.FC<StageKanbanPipelineProps> = ({
                         </div>
                       )}
 
+                      {/* Size Matrix Breakdown Chips */}
+                      {order.plannedSizes && Object.keys(order.plannedSizes).length > 0 && (
+                        <div className="flex flex-wrap gap-1 py-0.5">
+                          {Object.entries(order.plannedSizes).map(([szId, qty]) => {
+                            const sizeObj = order.set?.setSizes?.find((ss) => ss.sizeId === szId)?.size;
+                            const szName = sizeObj?.name || szId;
+                            return (
+                              <span key={szId} className="px-1.5 py-0.5 rounded bg-factory-950 border border-slate-800 text-[10px] text-slate-300 font-mono">
+                                {szName}: <strong className="text-primary-300">{qty}</strong>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+
                       {/* Progress Bar */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-[10px] font-medium text-slate-400">
