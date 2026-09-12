@@ -169,6 +169,7 @@ export interface CreateSizeInput {
 export type OrderStatus = 'DRAFT' | 'CONFIRMED' | 'IN_PRODUCTION' | 'READY_FOR_DISPATCH' | 'PARTIALLY_DISPATCHED' | 'COMPLETED' | 'CANCELLED';
 export type OrderPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 export type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID';
+export type OrderFulfillmentStatus = 'FULLY_AVAILABLE' | 'PARTIALLY_AVAILABLE' | 'SHORTAGE' | 'RESERVED' | 'READY_FOR_DISPATCH' | 'DISPATCHED' | 'COMPLETED';
 
 export interface OrderItem {
   id?: string;
@@ -186,6 +187,9 @@ export interface OrderItem {
   discount?: number;
   taxRate?: number;
   lineTotal: number;
+  availableStock?: number;
+  reservedStock?: number;
+  shortageQuantity?: number;
   producedQuantity?: number;
   dispatchedQuantity?: number;
 }
@@ -199,6 +203,7 @@ export interface Order {
   orderDate: string;
   deliveryDate: string;
   status: OrderStatus;
+  fulfillmentStatus?: OrderFulfillmentStatus;
   priority: OrderPriority;
   paymentStatus: PaymentStatus;
   totalQuantity: number;
@@ -209,6 +214,8 @@ export interface Order {
   discountAmount: number;
   grandTotal: number;
   paidAmount: number;
+  shortageQuantity?: number;
+  reservedQuantity?: number;
   notes?: string;
   createdById?: string;
   createdAt: string;
@@ -233,6 +240,7 @@ export interface OrderItemDraft {
 // ==========================================
 
 export type ProductionOrderStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED';
+export type ProductionBatchType = 'READY_STOCK' | 'REPLENISHMENT' | 'CUSTOM';
 
 export interface ProductionStage {
   id: string;
@@ -285,6 +293,7 @@ export interface ProductionOrder {
   targetCompletionDate: string;
   actualCompletionDate?: string;
   status: ProductionOrderStatus;
+  batchType?: ProductionBatchType;
   assignedTeam?: string;
   notes?: string;
   createdAt: string;
@@ -727,3 +736,160 @@ export interface NotificationItem {
   severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   createdAt: string;
 }
+
+// ==========================================
+// READY-STOCK & FINISHED GOODS ARCHITECTURE
+// ==========================================
+
+export interface FinishedGoodsStock {
+  id: string;
+  productId: string;
+  product?: Product;
+  productName?: string;
+  productCode?: string;
+  category?: string;
+  fabric?: string;
+  setId: string;
+  set?: Set;
+  setName?: string;
+  sizeId: string;
+  size?: Size;
+  sizeName?: string;
+  physicalQuantity: number;      // Total in warehouse
+  reservedQuantity: number;      // Reserved for active orders
+  dispatchableQuantity: number;  // Available to sell/dispatch = physical - reserved
+  damagedQuantity?: number;      // Damaged/QC rejected stock
+  reworkQuantity?: number;       // In rework
+  storageLocation?: string;
+  lastProductionDate?: string;
+  lastDispatchDate?: string;
+  unitCost?: number;
+  sellingPrice?: number;
+  stockAgeDays?: number;
+  agingBracket?: '0-30' | '31-60' | '61-90' | '90+';
+  movementSpeed?: 'FAST' | 'MEDIUM' | 'SLOW' | 'DEAD';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface StockReservation {
+  id: string;
+  orderId: string;
+  orderNumber?: string;
+  customerName?: string;
+  orderItemId?: string;
+  productId: string;
+  productName?: string;
+  setId: string;
+  setName?: string;
+  sizeId: string;
+  sizeName?: string;
+  reservedQuantity: number;
+  status: 'ACTIVE' | 'DISPATCHED' | 'RELEASED';
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ProductionRequirement {
+  id: string;
+  requirementNumber: string;
+  orderId?: string;
+  orderNumber?: string;
+  customerName?: string;
+  productId: string;
+  product?: Product;
+  setId: string;
+  set?: Set;
+  sizeId: string;
+  size?: Size;
+  requiredQuantity: number;
+  producedQuantity: number;
+  remainingQuantity: number;
+  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  status: 'PENDING' | 'IN_PRODUCTION' | 'FULFILLED' | 'CANCELLED';
+  linkedBatchId?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface Carton {
+  id: string;
+  cartonNumber: string;
+  batchId?: string;
+  batchNumber?: string;
+  orderId?: string;
+  totalPcs: number;
+  sizeBreakdown: Record<string, number>; // { [sizeId]: count }
+  packedBy?: string;
+  packedDate: string;
+  status: 'PACKED' | 'DISPATCHED' | 'IN_STOCK';
+  notes?: string;
+}
+
+export interface PackingRecord {
+  id: string;
+  batchId: string;
+  batchNumber?: string;
+  productId: string;
+  setId: string;
+  sizeId: string;
+  packedQuantity: number;
+  cartonNumber?: string;
+  packingDate: string;
+  packedBy?: string;
+  notes?: string;
+}
+
+export type ReturnQCStatus = 'GOOD' | 'DAMAGED' | 'REWORK';
+
+export interface StockReturn {
+  id: string;
+  returnNumber: string;
+  orderId?: string;
+  orderNumber?: string;
+  customerId: string;
+  customerName?: string;
+  productId: string;
+  product?: Product;
+  setId: string;
+  set?: Set;
+  sizeId: string;
+  size?: Size;
+  returnedQuantity: number;
+  qcStatus: ReturnQCStatus;
+  qcPassedQuantity: number;
+  qcDamagedQuantity: number;
+  qcReworkQuantity: number;
+  reason?: string;
+  inspectedBy?: string;
+  returnDate: string;
+  createdAt: string;
+}
+
+export interface StockAgingSummary {
+  bracket0To30: number;
+  bracket31To60: number;
+  bracket61To90: number;
+  bracket90Plus: number;
+  totalReadyStock: number;
+  totalReservedStock: number;
+  totalDispatchableStock: number;
+  totalStockValue: number;
+  fastMovingCount: number;
+  slowMovingCount: number;
+  deadStockCount: number;
+}
+
+export interface SizeStockAvailability {
+  sizeId: string;
+  sizeName: string;
+  sequence: number;
+  physicalStock: number;
+  reservedStock: number;
+  dispatchableStock: number;
+  requestedQuantity: number;
+  isSufficient: boolean;
+  shortageQuantity: number;
+}
+

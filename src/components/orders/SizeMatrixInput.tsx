@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Product, Set, OrderItemDraft } from '../../types';
-import { Trash2, Sparkles, Plus, Palette } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Product, Set, OrderItemDraft, FinishedGoodsStock } from '../../types';
+import { Trash2, Sparkles, Plus, Palette, CheckCircle, AlertTriangle } from 'lucide-react';
 import { DEFAULT_FACTORY_COLORS } from '../../services/products/productService';
+import { FinishedGoodsService } from '../../services/inventory/finishedGoodsService';
 
 interface SizeMatrixInputProps {
   itemIndex: number;
@@ -24,6 +25,15 @@ export const SizeMatrixInput: React.FC<SizeMatrixInputProps> = ({
 }) => {
   const [isCustomColor, setIsCustomColor] = useState(false);
   const [customColorInput, setCustomColorInput] = useState('');
+  const [liveStock, setLiveStock] = useState<FinishedGoodsStock[]>([]);
+
+  useEffect(() => {
+    if (item.productId && item.setId) {
+      FinishedGoodsService.getFinishedGoodsStock({ productId: item.productId, setId: item.setId })
+        .then((data) => setLiveStock(data))
+        .catch(() => {});
+    }
+  }, [item.productId, item.setId]);
 
   const selectedProduct = products.find((p) => p.id === item.productId);
   
@@ -281,11 +291,17 @@ export const SizeMatrixInput: React.FC<SizeMatrixInputProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
             {availableSizes.map((ss) => {
               const qty = item.sizeQuantities[ss.sizeId] || 0;
+              const matchingStock = liveStock.find((s) => s.sizeId === ss.sizeId);
+              const dispatchable = matchingStock ? matchingStock.dispatchableQuantity : 0;
+              const isShortage = qty > dispatchable;
+
               return (
                 <div
                   key={ss.sizeId}
                   className={`p-2 sm:p-2.5 rounded-lg border text-center transition-all ${
-                    qty > 0
+                    isShortage && qty > 0
+                      ? 'bg-amber-950/40 border-amber-500/60 shadow-sm'
+                      : qty > 0
                       ? 'bg-primary-950/40 border-primary-500/50 shadow-sm'
                       : 'bg-factory-900/80 border-slate-800'
                   }`}
@@ -302,6 +318,16 @@ export const SizeMatrixInput: React.FC<SizeMatrixInputProps> = ({
                     onChange={(e) => handleQuantityChange(ss.sizeId, e.target.value)}
                     className="w-full text-center py-1 rounded bg-factory-950 border border-slate-700 text-slate-100 text-sm font-black focus:outline-none focus:border-primary-500 transition-colors"
                   />
+                  <div className="mt-1 text-[10px] font-bold flex items-center justify-center gap-1">
+                    <span className={dispatchable > 0 ? 'text-emerald-400' : 'text-slate-500'}>
+                      Stock: {dispatchable}
+                    </span>
+                    {isShortage && qty > 0 && (
+                      <span className="text-amber-400 font-extrabold" title="Shortage: Replenishment needed">
+                        (-{qty - dispatchable})
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}

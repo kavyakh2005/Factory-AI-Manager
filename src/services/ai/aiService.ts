@@ -5,7 +5,8 @@ import { PaymentService } from '../payments/paymentService';
 import { SupplierService } from '../suppliers/supplierService';
 import { CustomerService } from '../customers/customerService';
 import { ProductService } from '../products/productService';
-import { Order, InventoryItem, Product, ProductionOrder, Set as GarmentSet } from '../../types';
+import { FinishedGoodsService } from '../inventory/finishedGoodsService';
+import { Order, InventoryItem, Product, ProductionOrder, Set as GarmentSet, FinishedGoodsStock, StockAgingSummary } from '../../types';
 
 export interface AiChatMessage {
   id: string;
@@ -110,7 +111,7 @@ export class AiService {
    */
   public static async compileLiveDatabaseContext(): Promise<string> {
     try {
-      const [orders, prodStats, delayedOrders, delayedProd, lowStock, financial, products, stages, suppliers] =
+      const [orders, prodStats, delayedOrders, delayedProd, lowStock, financial, products, stages, suppliers, finishedStock, stockAging, requirements] =
         await Promise.all([
           OrderService.getOrders(),
           ProductionService.getProductionStats(),
@@ -121,6 +122,9 @@ export class AiService {
           ProductService.getProducts(),
           ProductionService.getStageSummary(),
           SupplierService.getSuppliers(),
+          FinishedGoodsService.getFinishedGoodsStock(),
+          FinishedGoodsService.getStockAgingReport(),
+          FinishedGoodsService.getProductionRequirements(),
         ]);
 
       const activeOrders = orders.filter((o: Order) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED');
@@ -135,35 +139,33 @@ export class AiService {
 === SHREE RAAS KRISHNAM CREATION - FACTORY LIVE DATABASE CONTEXT ===
 Date/Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
 Factory: Shree Raas Krishnam Creation (Garment Manufacturing)
-Hierarchy: Product -> Product Sets (Standard 38-46, Plus 48-52) -> Sizes -> Shift Production Output
+Workflow: Hybrid Ready-Stock (Make-to-Stock) + Replenishment Architecture
+Hierarchy: Product -> Product Sets (Standard 38-46, Extra 48-52) -> Set Sizes -> Quantity
 
-1. ORDERS PIPELINE:
-- Total Orders in System: ${orders.length}
-- Active Running Orders: ${activeOrders.length} (${totalOrderPcs.toLocaleString('en-IN')} pcs)
-- Delayed/Overdue Orders: ${delayedOrders.length} orders
-${delayedOrders.map((o: Order) => `  * Order #${o.orderNumber}: ${o.totalQuantity} pcs for ${o.customer?.name || 'Customer'}, Due: ${o.deliveryDate}, Status: ${o.status}`).join('\n')}
+1. READY FINISHED GOODS STOCK (Saleable Warehoused Stock):
+- Total Physical Stock in Warehouse: ${stockAging.totalReadyStock.toLocaleString('en-IN')} pcs (Value: ₹${Math.round(stockAging.totalStockValue).toLocaleString('en-IN')})
+- Total Reserved for Active Orders: ${stockAging.totalReservedStock.toLocaleString('en-IN')} pcs
+- Total Dispatchable (Available to Sell): ${stockAging.totalDispatchableStock.toLocaleString('en-IN')} pcs
+- Stock Aging Breakdown: 0-30 Days: ${stockAging.bracket0To30} pcs | 31-60 Days: ${stockAging.bracket31To60} pcs | 61-90 Days: ${stockAging.bracket61To90} pcs | 90+ Days: ${stockAging.bracket90Plus} pcs
+- Fast-Moving Styles: ${stockAging.fastMovingCount} | Slow/Aging: ${stockAging.slowMovingCount} | Dead: ${stockAging.deadStockCount}
+${finishedStock.slice(0, 10).map((s: FinishedGoodsStock) => `  * ${s.productName || 'Garment'} [Size: ${s.sizeName}]: Physical: ${s.physicalQuantity}, Reserved: ${s.reservedQuantity}, Dispatchable: ${s.dispatchableQuantity} pcs (Age: ${s.stockAgeDays || 0}d, Speed: ${s.movementSpeed})`).join('\n')}
 
-2. PRODUCTION SHOP-FLOOR STATUS:
-- Total Planned Target: ${prodStats.totalPlannedQuantity.toLocaleString('en-IN')} pcs
-- Good Output Produced: ${prodStats.totalProducedQuantity.toLocaleString('en-IN')} pcs
-- Remaining in Pipeline: ${prodStats.totalRemainingQuantity.toLocaleString('en-IN')} pcs
-- QC Defect Rejections: ${prodStats.totalRejectedQuantity} pcs (${prodStats.rejectionRate}% rejection rate)
-- Delayed Production Batches: ${delayedProd.length}
-- Bottleneck Stage: '${bottleneck.stageName}' with ${bottleneck.activeOrdersCount} active batches pending.
+2. WORK IN PROGRESS (WIP) BY PRODUCTION STAGE (NOT Saleable Ready Stock):
+${stages.map((stg) => `  * ${stg.stageName}: ${stg.activeOrdersCount} batches active in line`).join('\n')}
+- Total Good Output Finished: ${prodStats.totalProducedQuantity.toLocaleString('en-IN')} pcs
+- Total WIP in Shop-Floor: ${prodStats.totalRemainingQuantity.toLocaleString('en-IN')} pcs
+- QC Defect Rejection Rate: ${prodStats.rejectionRate}% (${prodStats.totalRejectedQuantity} pcs rejected)
 
-3. INVENTORY & RAW MATERIAL STOCK:
-- Low Stock SKUs Below Minimum Threshold: ${lowStock.length} items
-${lowStock.map((i: InventoryItem) => `  * ${i.name} [${i.sku}]: Balance ${i.currentStock} ${i.unit} (Min Threshold: ${i.minimumStockThreshold || 10} ${i.unit})`).join('\n')}
+3. CUSTOMER ORDERS & ALLOCATION:
+- Active Orders: ${activeOrders.length} (${totalOrderPcs.toLocaleString('en-IN')} pcs)
+- Delayed/Overdue Orders: ${delayedOrders.length}
+- Shortage Replenishment Requirements: ${requirements.filter((r) => r.status === 'PENDING').length} pending requests (${requirements.filter((r) => r.status === 'PENDING').reduce((s, r) => s + r.remainingQuantity, 0)} pcs)
 
-4. FINANCIAL LEDGER:
+4. INVENTORY & FINANCIALS:
+- Low Stock Raw Materials Below Threshold: ${lowStock.length} items
 - Market Customer Receivables Due: ₹${Math.round(financial.netReceivable).toLocaleString('en-IN')}
-- Vendor/Mill Payables Pending: ₹${Math.round(financial.netPayable).toLocaleString('en-IN')}
-- Total Bank Collections Received: ₹${Math.round(financial.totalReceived).toLocaleString('en-IN')}
-- Total Vendor Payouts Released: ₹${Math.round(financial.totalPaid).toLocaleString('en-IN')}
-
-5. MASTER DATA:
-- Registered Garment Styles: ${products.length} styles
-- Active Suppliers: ${suppliers.length} vendors
+- Vendor Payables Pending: ₹${Math.round(financial.netPayable).toLocaleString('en-IN')}
+- Bank Cash Collections: ₹${Math.round(financial.totalReceived).toLocaleString('en-IN')}
 ===================================================================
 `;
       return context;
@@ -187,12 +189,16 @@ ${lowStock.map((i: InventoryItem) => `  * ${i.name} [${i.sku}]: Balance ${i.curr
     if (apiKey) {
       try {
         const systemInstruction = `You are the Expert AI Factory Manager & Chief Operating Officer Assistant for Shree Raas Krishnam Creation (a garment manufacturing factory).
+You operate under a HYBRID READY-STOCK (MAKE-TO-STOCK) factory model.
+Production batches run independently before customer orders arrive.
+Customer orders consume Ready Stock, creating reservations.
+WIP (Cutting, Stitching, Washing, Finishing, QC) is NEVER counted as available customer stock.
 You have real-time access to the live PostgreSQL database context provided below.
 Rules:
-1. Always use factual numbers, order numbers, and SKU names from the provided database context.
-2. Answer concisely, professionally, and authoritatively.
+1. Always use factual numbers, order numbers, and size breakdowns from the provided database context.
+2. Clearly distinguish Physical Stock vs Reserved Stock vs Dispatchable Stock vs WIP.
 3. You can answer in fluent English, Hindi, or Hinglish based on the user's query language.
-4. If asked for action recommendations, suggest concrete next steps (e.g. prioritize Stitching stage, call supplier for fabric replenishment, follow up with customer for overdue payments).
+4. If asked about size availability (e.g. "42 size ka kitna ready maal hai?"), provide the exact dispatchable, physical, and reserved numbers.
 5. Never invent fake data or numbers that are not in the context.
 
 ${liveContext}`;
@@ -243,29 +249,15 @@ ${liveContext}`;
 
   private static async extractRelevantDataCard(userPrompt: string): Promise<AiChatMessage['dataCard'] | undefined> {
     const q = userPrompt.toLowerCase();
-    if (q.includes('delay') || q.includes('late') || q.includes('overdue')) {
-      const delayed = await OrderService.getDelayedOrders();
-      if (delayed.length > 0) {
+    if (q.includes('ready stock') || q.includes('ready maal') || q.includes('stock mein') || q.includes('size')) {
+      const stock = await FinishedGoodsService.getFinishedGoodsStock();
+      if (stock.length > 0) {
         return {
-          title: 'Live Overdue Orders (Real Database)',
-          metrics: delayed.slice(0, 4).map((o: Order) => ({
-            label: `Order #${o.orderNumber} (${o.customer?.name || 'Customer'})`,
-            value: `${o.totalQuantity} pcs | Due: ${o.deliveryDate}`,
-            color: 'text-red-400',
-          })),
-          linkUrl: '/orders',
-        };
-      }
-    }
-    if (q.includes('stock') || q.includes('fabric') || q.includes('material') || q.includes('shortage')) {
-      const lowStock = await InventoryService.getLowStockAlerts();
-      if (lowStock.length > 0) {
-        return {
-          title: 'Critical Low Stock Materials',
-          metrics: lowStock.slice(0, 4).map((i: InventoryItem) => ({
-            label: `${i.name} [${i.sku}]`,
-            value: `${i.currentStock} ${i.unit} (Min: ${i.minimumStockThreshold || 10})`,
-            color: 'text-amber-400',
+          title: 'Ready Finished Goods Stock',
+          metrics: stock.slice(0, 5).map((s) => ({
+            label: `${s.productName} (${s.sizeName})`,
+            value: `Available: ${s.dispatchableQuantity} pcs (Total: ${s.physicalQuantity})`,
+            color: s.dispatchableQuantity > 0 ? 'text-emerald-400' : 'text-red-400',
           })),
           linkUrl: '/inventory',
         };
@@ -278,24 +270,83 @@ ${liveContext}`;
    * Deterministic Heuristic RAG Engine
    */
   private static async generateHeuristicRagResponse(
-    queryText: string
+    userPrompt: string
   ): Promise<{ text: string; dataCard?: AiChatMessage['dataCard'] }> {
-    const q = queryText.toLowerCase();
+    const q = userPrompt.toLowerCase();
 
-    // 1. Delayed Orders
-    if (q.includes('delay') || q.includes('late') || q.includes('overdue') || q.includes('late delivery')) {
+    // 1. Ready Stock & Size-Wise Queries
+    if (q.includes('ready') || q.includes('ready maal') || q.includes('stock') || q.includes('size') || q.includes('kitna maal')) {
+      const stockList = await FinishedGoodsService.getFinishedGoodsStock();
+      const aging = await FinishedGoodsService.getStockAgingReport();
+
+      // Check if specific size queried (e.g. "42 size", "38 size", "40 size")
+      const sizeMatch = q.match(/\b(38|40|42|44|46|48|50|52|xs|s|m|l|xl|xxl)\b/i);
+      if (sizeMatch) {
+        const queriedSize = sizeMatch[1].toUpperCase();
+        const matchingStock = stockList.filter((s) => s.sizeName?.toUpperCase() === queriedSize || s.sizeId.includes(queriedSize));
+        const totalPhysical = matchingStock.reduce((a, b) => a + b.physicalQuantity, 0);
+        const totalReserved = matchingStock.reduce((a, b) => a + b.reservedQuantity, 0);
+        const totalDispatchable = matchingStock.reduce((a, b) => a + b.dispatchableQuantity, 0);
+
+        return {
+          text: `Size ${queriedSize} Ready Stock Status:\n• Physical Stock in Warehouse: ${totalPhysical} pcs\n• Reserved for Active Orders: ${totalReserved} pcs\n• Dispatchable (Available to Sell): ${totalDispatchable} pcs\n\nWIP floor pieces (Cutting/Stitching) are tracked separately and not counted in this saleable stock.`,
+          dataCard: {
+            title: `Size ${queriedSize} Stock Breakdown`,
+            metrics: [
+              { label: 'Dispatchable Stock', value: `${totalDispatchable} pcs`, color: 'text-emerald-400' },
+              { label: 'Reserved Stock', value: `${totalReserved} pcs`, color: 'text-amber-400' },
+              { label: 'Physical Stock', value: `${totalPhysical} pcs`, color: 'text-indigo-300' },
+            ],
+            linkUrl: '/inventory',
+          },
+        };
+      }
+
+      // Fast moving / slow moving query
+      if (q.includes('fast moving') || q.includes('slow moving') || q.includes('dead stock')) {
+        return {
+          text: `Stock Velocity & Aging Analysis:\n• Total Ready Stock: ${aging.totalReadyStock.toLocaleString('en-IN')} pcs (₹${Math.round(aging.totalStockValue).toLocaleString('en-IN')})\n• 0–30 Days Fresh Stock: ${aging.bracket0To30} pcs\n• 31–60 Days: ${aging.bracket31To60} pcs\n• 61–90 Days: ${aging.bracket61To90} pcs\n• 90+ Days (Aging/Dead Stock): ${aging.bracket90Plus} pcs\n\nFast-moving styles: ${aging.fastMovingCount} items | Slow-moving: ${aging.slowMovingCount} items.`,
+          dataCard: {
+            title: 'Ready Stock Aging Breakdown',
+            metrics: [
+              { label: '0–30 Days (Fresh)', value: `${aging.bracket0To30} pcs`, color: 'text-emerald-400' },
+              { label: '31–60 Days', value: `${aging.bracket31To60} pcs`, color: 'text-blue-400' },
+              { label: '61–90 Days (Slow)', value: `${aging.bracket61To90} pcs`, color: 'text-amber-400' },
+              { label: '90+ Days (Dead Stock)', value: `${aging.bracket90Plus} pcs`, color: 'text-red-400' },
+            ],
+            linkUrl: '/inventory',
+          },
+        };
+      }
+
+      return {
+        text: `Ready Finished Goods Warehouse Summary:\n• Total Physical Stock: ${aging.totalReadyStock.toLocaleString('en-IN')} pcs\n• Reserved for Orders: ${aging.totalReservedStock.toLocaleString('en-IN')} pcs\n• Dispatchable Stock: ${aging.totalDispatchableStock.toLocaleString('en-IN')} pcs\n• Warehouse Stock Valuation: ₹${Math.round(aging.totalStockValue).toLocaleString('en-IN')}`,
+        dataCard: {
+          title: 'Ready Stock Overview',
+          metrics: [
+            { label: 'Dispatchable Stock', value: `${aging.totalDispatchableStock.toLocaleString('en-IN')} pcs`, color: 'text-emerald-400' },
+            { label: 'Reserved Stock', value: `${aging.totalReservedStock.toLocaleString('en-IN')} pcs`, color: 'text-amber-400' },
+            { label: 'Physical Stock', value: `${aging.totalReadyStock.toLocaleString('en-IN')} pcs`, color: 'text-indigo-300' },
+          ],
+          linkUrl: '/inventory',
+        },
+      };
+    }
+
+    // 2. Delayed & Overdue Orders
+    if (q.includes('delayed') || q.includes('late') || q.includes('overdue') || q.includes('pending delivery')) {
       const delayed = await OrderService.getDelayedOrders();
       if (delayed.length === 0) {
         return {
-          text: 'Great news! Factory mein currently koi bhi order delayed nahi hai. All confirmed production batches are progressing as per delivery schedule.',
+          text: 'Factory Delivery Status: Zero delayed orders in system. All running orders are on track.',
         };
       }
       return {
-        text: `Factory database analysis shows that ${delayed.length} order(s) have passed their scheduled delivery deadline. Immediate dispatch expediting is recommended:`,
+        text: `Alert: There are ${delayed.length} order(s) past their delivery deadline. Immediate dispatch priority recommended:`,
         dataCard: {
           title: 'Live Overdue Orders (Real Database)',
-          metrics: delayed.map((o: Order) => ({
-            label: `Order #${o.orderNumber} (${o.customer?.name || 'Customer'})`,
+          metrics: delayed.slice(0, 5).map((o: Order) => ({
+            label: `Order #${o.orderNumber} - ${o.customer?.name || 'Customer'}`,
             value: `${o.totalQuantity} pcs | Due: ${o.deliveryDate}`,
             color: 'text-red-400',
           })),
@@ -304,8 +355,8 @@ ${liveContext}`;
       };
     }
 
-    // 2. Low Stock Raw Material
-    if (q.includes('low stock') || q.includes('fabric') || q.includes('material') || q.includes('khatam') || q.includes('shortage')) {
+    // 3. Raw Material Low Stock
+    if (q.includes('fabric') || q.includes('raw material') || q.includes('material') || q.includes('khatam')) {
       const lowStock = await InventoryService.getLowStockAlerts();
       if (lowStock.length === 0) {
         return {
@@ -326,17 +377,18 @@ ${liveContext}`;
       };
     }
 
-    // 3. Production Output & Rejections
-    if (q.includes('production') || q.includes('output') || q.includes('pieces bani') || q.includes('target') || q.includes('progress')) {
+    // 4. Production Output & Rejections
+    if (q.includes('production') || q.includes('output') || q.includes('pieces bani') || q.includes('cutting') || q.includes('stitching') || q.includes('finishing')) {
       const stats = await ProductionService.getProductionStats();
+      const stages = await ProductionService.getStageSummary();
       return {
-        text: `Shop-Floor Production Status:\n• Total Planned Target: ${stats.totalPlannedQuantity.toLocaleString('en-IN')} pcs\n• Good Pieces Finished: ${stats.totalProducedQuantity.toLocaleString('en-IN')} pcs\n• Floor Rejections Logged: ${stats.totalRejectedQuantity} pcs (${stats.rejectionRate}% rejection rate)`,
+        text: `Shop-Floor WIP & Production Status:\n• Total Planned Target: ${stats.totalPlannedQuantity.toLocaleString('en-IN')} pcs\n• Good Pieces Finished: ${stats.totalProducedQuantity.toLocaleString('en-IN')} pcs\n• WIP in Shop-Floor: ${stats.totalRemainingQuantity.toLocaleString('en-IN')} pcs\n• QC Rejection Rate: ${stats.rejectionRate}% (${stats.totalRejectedQuantity} pcs)\n\nWIP Stage Breakdown:\n${stages.map((s) => `• ${s.stageName}: ${s.activeOrdersCount} batches active`).join('\n')}`,
         dataCard: {
           title: 'Shop-Floor Production Targets',
           metrics: [
             { label: 'Planned Target', value: `${stats.totalPlannedQuantity.toLocaleString('en-IN')} pcs` },
             { label: 'Good Output Finished', value: `${stats.totalProducedQuantity.toLocaleString('en-IN')} pcs`, color: 'text-emerald-400' },
-            { label: 'Remaining in Floor', value: `${stats.totalRemainingQuantity.toLocaleString('en-IN')} pcs`, color: 'text-indigo-300' },
+            { label: 'WIP in Floor', value: `${stats.totalRemainingQuantity.toLocaleString('en-IN')} pcs`, color: 'text-indigo-300' },
             { label: 'QC Rejection Rate', value: `${stats.rejectionRate}%`, color: stats.rejectionRate > 5 ? 'text-red-400' : 'text-slate-300' },
           ],
           linkUrl: '/production',
@@ -344,50 +396,16 @@ ${liveContext}`;
       };
     }
 
-    // 4. Bottleneck Stage Diagnosis
-    if (q.includes('bottleneck') || q.includes('ruka') || q.includes('stage') || q.includes('line')) {
-      const stages = await ProductionService.getStageSummary();
-      const bottleneck = stages.reduce((max, s) => (s.activeOrdersCount > max.activeOrdersCount ? s : max), stages[0]);
-      return {
-        text: `Production Line Bottleneck Analysis: Stage '${bottleneck?.stageName || 'Stitching'}' currently has the highest batch concentration (${bottleneck?.activeOrdersCount || 0} active batches). Increasing machine allocation here will speed up total order throughput.`,
-        dataCard: {
-          title: '7-Stage Production Workload',
-          metrics: stages.map((s) => ({
-            label: s.stageName,
-            value: `${s.activeOrdersCount} Active Batches`,
-            color: s.stageName === bottleneck?.stageName ? 'text-amber-400' : 'text-slate-300',
-          })),
-          linkUrl: '/production',
-        },
-      };
-    }
-
-    // 5. Receivables & Payments
-    if (q.includes('outstanding') || q.includes('receivable') || q.includes('customer payment') || q.includes('paisa') || q.includes('due')) {
-      const fin = await PaymentService.getFinancialSummary();
-      return {
-        text: `Financial Ledger Overview:\n• Market Receivables Due: ₹${Math.round(fin.netReceivable).toLocaleString('en-IN')}\n• Total Collected to Bank: ₹${Math.round(fin.totalReceived).toLocaleString('en-IN')}\n• Vendor Payables Pending: ₹${Math.round(fin.netPayable).toLocaleString('en-IN')}`,
-        dataCard: {
-          title: 'Accounts Receivable Ledger',
-          metrics: [
-            { label: 'Total Billed Pipeline', value: `₹${Math.round(fin.netReceivable + fin.totalReceived).toLocaleString('en-IN')}` },
-            { label: 'Collected to Bank', value: `₹${Math.round(fin.totalReceived).toLocaleString('en-IN')}`, color: 'text-emerald-400' },
-            { label: 'Market Outstanding Due', value: `₹${Math.round(fin.netReceivable).toLocaleString('en-IN')}`, color: 'text-amber-400' },
-          ],
-          linkUrl: '/payments',
-        },
-      };
-    }
-
     // Default Overview
-    const [orders, prod, fin] = await Promise.all([
+    const [orders, prod, fin, aging] = await Promise.all([
       OrderService.getOrders(),
       ProductionService.getProductionStats(),
       PaymentService.getFinancialSummary(),
+      FinishedGoodsService.getStockAgingReport(),
     ]);
 
     return {
-      text: `Live Factory Summary (Shree Raas Krishnam Creation):\n• Active Pipeline: ${orders.length} orders (${orders.reduce((s: number, o: Order) => s + (o.totalQuantity || 0), 0)} pcs)\n• Production Completion: ${prod.totalProducedQuantity} / ${prod.totalPlannedQuantity} pcs (${prod.rejectionRate}% defect rate)\n• Uncollected Market Receivables: ₹${Math.round(fin.netReceivable).toLocaleString('en-IN')}\n\nYou can ask specific questions about overdue orders, fabric stock, production stages, or customer balances.`,
+      text: `Live Factory Summary (Shree Raas Krishnam Creation):\n• Ready Finished Goods Stock: ${aging.totalDispatchableStock.toLocaleString('en-IN')} dispatchable pcs (${aging.totalReadyStock} total physical pcs in warehouse)\n• Active Order Pipeline: ${orders.length} orders (${orders.reduce((s: number, o: Order) => s + (o.totalQuantity || 0), 0)} pcs)\n• Production Completion: ${prod.totalProducedQuantity} / ${prod.totalPlannedQuantity} pcs (${prod.rejectionRate}% defect rate)\n• Uncollected Market Receivables: ₹${Math.round(fin.netReceivable).toLocaleString('en-IN')}\n\nYou can ask specific questions about size-wise ready stock, stock aging, WIP stages, overdue orders, or replenishment requirements.`,
     };
   }
 

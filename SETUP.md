@@ -1,7 +1,7 @@
 # 🛠️ Factory AI Manager — Setup & Quickstart Guide
 
-> **Cloud-Native Garment Manufacturing & Operations ERP**  
-> Running on **React 18 + Vite + TypeScript + Tailwind CSS** connected to **Supabase PostgreSQL**.
+> **Enterprise Garment Manufacturing ERP & AI Manager**  
+> Running on **React 18 + Vite 6 + TypeScript + Tailwind CSS** connected to **Supabase PostgreSQL & Google Gemini AI**.
 
 ---
 
@@ -9,73 +9,71 @@
 
 - **Node.js**: `v18.x`, `v20.x`, or `v22.x`
 - **NPM**: `v9.x` or `v10.x`
-- **Web Browser**: Google Chrome, Microsoft Edge, Brave, Mozilla Firefox, or Apple Safari
+- **Web Browser**: Chrome, Edge, Safari, Firefox, or Brave (Mobile, Tablet & Desktop supported)
 
 ---
 
-## 2. Supabase Cloud Configuration
+## 2. Environment Variables Configuration (`.env`)
 
-1. Log into your [Supabase Dashboard](https://supabase.com/dashboard).
-2. Open the **SQL Editor** tab in your project.
-3. Run the schema migrations in order:
-   - Initial Schema: [`supabase/migrations/20260309_init_schema.sql`](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/supabase/migrations/20260309_init_schema.sql)
-   - Production Schema: [`supabase/migrations/20260310_production_schema.sql`](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/supabase/migrations/20260310_production_schema.sql)
-4. Run the permissions script to enable direct application access:
-   - Script: [`supabase/enable_anon_access.sql`](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/supabase/enable_anon_access.sql)
-
----
-
-## 3. Environment Variables Configuration
-
-Ensure your [`.env`](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/.env) file is populated with your Supabase credentials:
+Create or update your [`.env`](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/.env) file in the root directory:
 
 ```env
-# Supabase Configuration
+# Supabase PostgreSQL Cloud Configuration
 VITE_SUPABASE_URL="https://mnnfdedjfffsogdiaoct.supabase.co"
 VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+# (Optional) Google Gemini API Key for AI Intelligence Engine
+# Can also be dynamically configured via Settings or AI Manager UI modal
+VITE_GEMINI_API_KEY="your-google-gemini-api-key"
 ```
 
 ---
 
-## 4. Running the Application Locally
+## 3. Database Migration Setup (Supabase)
+
+If deploying to a fresh Supabase instance, execute the SQL migrations in order via the **SQL Editor**:
+1. [`supabase/migrations/20260309_init_schema.sql`](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/supabase/migrations/20260309_init_schema.sql)
+2. [`supabase/migrations/20260310_production_schema.sql`](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/supabase/migrations/20260310_production_schema.sql)
+3. [`supabase/migrations/20260312_full_factory_modules_schema.sql`](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/supabase/migrations/20260312_full_factory_modules_schema.sql)
+4. [`supabase/enable_anon_access.sql`](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/supabase/enable_anon_access.sql)
+
+---
+
+## 4. Running the Application
 
 ```bash
-# 1. Install dependencies
+# 1. Install all dependencies
 npm install
 
-# 2. Run TypeScript static type check (0 errors)
+# 2. Type-check entire project (verifies 0 TypeScript errors)
 npm run check
 
-# 3. Start local development server
+# 3. Launch local Vite development server
 npm run dev
 ```
 
-The application will be accessible at: **`http://localhost:5173`**
+Open **`http://localhost:5173`** in your browser.
 
 ---
 
-## 5. Factory Owner Login & Authorization Credentials
+## 5. Master Factory Owner Login Credentials
 
-The application is configured with real authentication and role-based authorization:
-
-| Parameter | Value |
+| Credential | Value |
 | :--- | :--- |
-| **Master Factory Owner** | `kavyakhandelwal57@gmail.com` |
+| **Email** | `kavyakhandelwal57@gmail.com` |
 | **Password** | `Kavya@2005` |
-| **Primary Role** | `OWNER` (Full Master, Financial, Operational, and System Administration Access) |
-
-### Role Hierarchy & Access:
-- **`OWNER` & `ADMIN`**: Complete access across Dashboard, Production, Orders, Inventory, Purchases, Dispatch, Payments, Expenses, Reports, AI Manager, and Settings.
-- **`PRODUCTION_MANAGER`**: Floor execution, cutting/stitching/finishing/QC logs, order tracking, and stock visibility.
-- **`INVENTORY_MANAGER`**: Raw material intake, SKU ledger, dock inward from purchase orders, and dispatches.
-- **`ACCOUNTANT`**: Wholesale order payments, supplier payouts, operational expense tracking, and GST reporting.
-- **`STAFF`**: Floor production entries, product viewing, and inventory balance lookups.
+| **User Role** | `OWNER` (Full Master Administrative, Financial & Operational Access) |
 
 ---
 
-## 6. Key Operations & Features
+## 6. Build & Production Deployment
 
-- **Full Edit & Delete CRUD**: Direct Edit and Delete options available across Customers, Suppliers, Products, Orders, Purchases, Inventory SKUs, Sets, Sizes, and Users.
-- **Sets & Sizes Hierarchy**: 22+ standard garment sizes pre-seeded with 1-click presets (`Standard 38-46`, `Plus 48-52`, `Kids 24-32`, `Alpha S-XXL`) and inline custom size adder.
-- **Persistent Factory Profile**: Edit factory legal entity name, premises address, GST number, currency symbol, and tax % with real-time database persistence.
-- **Production Stage Tracking**: 5-stage live floor tracker (**Cutting ➔ Stitching ➔ Finishing ➔ QC & Rejection Analysis ➔ Packing**).
+```bash
+# Build optimized production bundle
+npm run build
+
+# Preview production build locally
+npm run preview
+```
+
+The output bundle is generated inside `dist/` ready for zero-config deployment on Vercel, Netlify, Cloudflare Pages, or AWS S3/CloudFront.

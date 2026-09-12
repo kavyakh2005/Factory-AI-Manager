@@ -3,6 +3,7 @@ import { LocalStorageManager } from '../storage/localDb';
 import { Dispatch, CreateDispatchInput, Order } from '../../types';
 import { OrderService } from '../orders/orderService';
 import { InventoryService } from '../inventory/inventoryService';
+import { FinishedGoodsService } from '../inventory/finishedGoodsService';
 
 let localDispatches: Dispatch[] = [];
 
@@ -133,23 +134,13 @@ export class DispatchService {
           console.warn('Order status update warning:', orderErr);
         }
 
-        // Record Finished Goods OUT movement in immutable Inventory Ledger
-        try {
-          const invItems = await InventoryService.getInventoryItems({ itemType: 'FINISHED_GOODS' });
-          if (invItems.length > 0) {
-            await InventoryService.recordStockTransaction({
-              itemId: invItems[0].id,
-              transactionType: 'OUT',
-              quantityChange: -newDispatch.totalItemsCount,
-              unit: 'pcs',
-              referenceType: 'DISPATCH',
-              referenceId: newDispatch.dispatchNumber,
-              reason: 'Finished Goods Dispatch',
-              remarks: `Dispatched ${newDispatch.totalPackages} cartons to ${order?.customer?.name || 'Customer'} via ${newDispatch.carrierName || 'Courier'} (LR: ${newDispatch.trackingNumber || 'N/A'})`,
-            });
+        // Deduct reserved stock from Ready Finished Goods Stock & record ledger entries
+        if (order) {
+          try {
+            await FinishedGoodsService.dispatchOrderStock(newDispatch.id, order.id, order.orderItems || []);
+          } catch (fgErr) {
+            console.warn('Finished goods dispatch stock deduction warning:', fgErr);
           }
-        } catch (invErr) {
-          console.warn('Inventory dispatch ledger warning:', invErr);
         }
 
         // Audit Log

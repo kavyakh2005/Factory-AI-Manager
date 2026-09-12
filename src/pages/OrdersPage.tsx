@@ -73,11 +73,16 @@ export const OrdersPage: React.FC = () => {
     mutationFn: (orderId: string) => OrderService.deleteOrder(orderId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['ready-stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-reservations'] });
+    },
+    onError: (err: any) => {
+      alert(`Error deleting order: ${err?.message || 'Could not delete order'}`);
     },
   });
 
   const handleDeleteOrder = (orderId: string, orderNumber: string) => {
-    if (window.confirm(`Are you sure you want to delete order "${orderNumber}"? This cannot be undone.`)) {
+    if (window.confirm(`Are you sure you want to delete order "${orderNumber}"? This will also remove any attached dispatch records and release reserved stock.`)) {
       deleteOrderMutation.mutate(orderId);
     }
   };
@@ -399,6 +404,7 @@ export const OrdersPage: React.FC = () => {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDeleteOrder(order.id, order.orderNumber)}
+                            isLoading={deleteOrderMutation.isPending && deleteOrderMutation.variables === order.id}
                             className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"
                             title="Delete Order"
                           >

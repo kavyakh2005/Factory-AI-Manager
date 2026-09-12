@@ -39,6 +39,9 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
   const [deliveryDate, setDeliveryDate] = useState(deliveryDueStr);
   const [priority, setPriority] = useState<OrderPriority>('NORMAL');
   const [status, setStatus] = useState<OrderStatus>('CONFIRMED');
+  const [discountAmount, setDiscountAmount] = useState<number>(0);
+  const [paidAmount, setPaidAmount] = useState<number>(0);
+  const [paymentStatus, setPaymentStatus] = useState<'UNPAID' | 'PARTIAL' | 'PAID'>('UNPAID');
   const [notes, setNotes] = useState('');
 
   // Items State (supports multiple product/set line items)
@@ -81,8 +84,12 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
     subtotalAmount += rowPcs * (item.unitRate || 0);
   });
 
-  const taxAmount = (subtotalAmount * 5) / 100;
-  const grandTotal = subtotalAmount + taxAmount;
+  const discount = Math.max(0, Number(discountAmount) || 0);
+  const taxableAmount = Math.max(0, subtotalAmount - discount);
+  const taxAmount = (taxableAmount * 5) / 100;
+  const grandTotal = taxableAmount + taxAmount;
+  const advancePaid = Math.max(0, Number(paidAmount) || 0);
+  const balanceDue = Math.max(0, grandTotal - advancePaid);
 
   const handleAddItem = () => {
     setItems([
@@ -143,6 +150,9 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
         priority,
         status,
         notes,
+        discountAmount: discount,
+        paidAmount: advancePaid,
+        paymentStatus: advancePaid >= grandTotal && grandTotal > 0 ? 'PAID' : advancePaid > 0 ? 'PARTIAL' : 'UNPAID',
         items,
       });
 
@@ -349,6 +359,46 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             </div>
           </div>
 
+          {/* Commercials: Discount & Advance Payment */}
+          <div className="p-4 rounded-xl bg-factory-950/80 border border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">
+                Special Discount (₹)
+              </label>
+              <input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={discountAmount || ''}
+                onChange={(e) => setDiscountAmount(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-lg bg-factory-900 border border-slate-700 text-slate-100 text-xs focus:border-primary-500 outline-none font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">
+                Advance Payment Received (₹)
+              </label>
+              <input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={paidAmount || ''}
+                onChange={(e) => setPaidAmount(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-lg bg-factory-900 border border-slate-700 text-emerald-400 text-xs focus:border-primary-500 outline-none font-mono font-bold"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">
+                Balance Receivable
+              </label>
+              <div className="w-full px-3 py-2 rounded-lg bg-factory-900/60 border border-slate-700/60 text-amber-400 text-xs font-mono font-black flex items-center">
+                ₹{balanceDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+          </div>
+
           {/* Notes */}
           <div>
             <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">
@@ -364,29 +414,35 @@ export const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
           </div>
 
           {/* Bottom Financial Summary Bar & Actions */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl bg-factory-950 border border-slate-800">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-left w-full sm:w-auto">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-4 p-4 rounded-xl bg-factory-950 border border-slate-800">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-left w-full lg:w-auto">
               <div>
-                <div className="text-[10px] text-slate-400 uppercase font-semibold">Total Garment Pcs</div>
-                <div className="text-xl font-black text-slate-100">{grandTotalPcs.toLocaleString()} pcs</div>
+                <div className="text-[10px] text-slate-400 uppercase font-semibold">Total Pcs</div>
+                <div className="text-lg font-black text-slate-100">{grandTotalPcs.toLocaleString()} pcs</div>
               </div>
               <div>
                 <div className="text-[10px] text-slate-400 uppercase font-semibold">Subtotal</div>
-                <div className="text-sm font-bold text-slate-200">₹{subtotalAmount.toLocaleString()}</div>
+                <div className="text-xs font-bold text-slate-200">₹{subtotalAmount.toLocaleString()}</div>
               </div>
               <div>
                 <div className="text-[10px] text-slate-400 uppercase font-semibold">GST (5%)</div>
-                <div className="text-sm font-bold text-slate-300">₹{taxAmount.toLocaleString()}</div>
+                <div className="text-xs font-bold text-slate-300">₹{taxAmount.toLocaleString()}</div>
               </div>
               <div>
                 <div className="text-[10px] text-emerald-400 uppercase font-bold">Grand Total</div>
-                <div className="text-lg font-black text-emerald-400">
+                <div className="text-sm font-black text-emerald-400">
                   ₹{grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-amber-400 uppercase font-bold">Balance Due</div>
+                <div className="text-sm font-black text-amber-400">
+                  ₹{balanceDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+            <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
               <Button type="button" variant="ghost" size="sm" onClick={onClose}>
                 Cancel
               </Button>

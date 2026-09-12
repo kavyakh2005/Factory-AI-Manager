@@ -10,8 +10,10 @@ import {
   Order,
   Set as GarmentSet,
   SetSize,
+  ProductionBatchType,
 } from '../../types';
 import { OrderService } from '../orders/orderService';
+import { FinishedGoodsService } from '../inventory/finishedGoodsService';
 
 // Default Stages in Valid Sequential Garment Workflow
 export const DEFAULT_PRODUCTION_STAGES: ProductionStage[] = [
@@ -457,8 +459,10 @@ export class ProductionService {
   }
 
   // 6. Create Production Plan from Confirmed Order Item
+  // 6. Create Production Plan (Independent Ready-Stock Batch or Replenishment)
   static async createProductionPlan(params: {
     orderId?: string;
+    batchType?: ProductionBatchType;
     productId: string;
     variantId?: string;
     setId: string;
@@ -477,6 +481,7 @@ export class ProductionService {
       id: crypto.randomUUID(),
       productionNumber,
       orderId: params.orderId,
+      batchType: params.batchType || (params.orderId ? 'REPLENISHMENT' : 'READY_STOCK'),
       productId: params.productId,
       variantId: params.variantId,
       setId: params.setId,
@@ -532,6 +537,7 @@ export class ProductionService {
           entity_id: newProdOrder.id,
           new_value: {
             production_number: newProdOrder.productionNumber,
+            batch_type: newProdOrder.batchType,
             total_planned_qty: newProdOrder.totalPlannedQty,
             assigned_team: newProdOrder.assignedTeam,
           },
@@ -660,6 +666,7 @@ export class ProductionService {
   }
 
   // 8. Advance Stage along the 7-Stage Workflow Pipeline
+  // ONLY completing PACKING / reaching READY transfers pieces to Ready Finished Goods Stock
   static async advanceStage(
     productionOrderId: string,
     targetStageId: string,
@@ -680,7 +687,36 @@ export class ProductionService {
         prodOrder.status = 'COMPLETED';
         prodOrder.actualCompletionDate = new Date().toISOString();
 
-        // Update underlying order to READY_FOR_DISPATCH
+        // 1. Transfer QC-passed packed pieces to Finished Goods Stock
+        const sets = await OrderService.getSetsWithSizes();
+        const setObj = sets.find((s) => s.id === prodOrder.setId);
+        if (setObj) {
+          const breakdown = this.calculateSizeWiseBreakdown(prodOrder, setObj);
+          let packingEntries = breakdown
+            .filter((sb) => sb.goodQuantity > 0)
+            .map((sb) => ({ sizeId: sb.sizeId, quantity: sb.goodQuantity }));
+
+          // Fallback to planned size quantities if no step entries were logged
+          if (packingEntries.length === 0 && prodOrder.plannedSizes) {
+            packingEntries = Object.entries(prodOrder.plannedSizes)
+              .filter(([_, qty]) => (Number(qty) || 0) > 0)
+              .map(([sizeId, qty]) => ({ sizeId, quantity: Number(qty) }));
+          }
+
+          if (packingEntries.length > 0) {
+            await FinishedGoodsService.recordPackingOutput(
+              prodOrder.id,
+              prodOrder.productionNumber,
+              prodOrder.productId,
+              prodOrder.setId,
+              packingEntries,
+              undefined,
+              prodOrder.assignedTeam || 'Packing Supervisor'
+            );
+          }
+        }
+
+        // 2. Update underlying order if this batch was for an order
         if (prodOrder.orderId) {
           await OrderService.updateOrderStatus(prodOrder.orderId, 'READY_FOR_DISPATCH');
         }

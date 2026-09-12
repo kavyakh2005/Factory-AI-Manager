@@ -1,9 +1,9 @@
 import { supabase, isSupabaseConfigured } from '../supabase/client';
 import { LocalStorageManager } from '../storage/localDb';
-import { Customer, Product, Set, Order, OrderItem, OrderStatus, OrderPriority, OrderItemDraft } from '../../types';
+import { Customer, Product, Set, Order, OrderItem, OrderStatus, OrderPriority, OrderItemDraft, OrderFulfillmentStatus } from '../../types';
 import { ProductService } from '../products/productService';
-
 import { CustomerService } from '../customers/customerService';
+import { FinishedGoodsService } from '../inventory/finishedGoodsService';
 
 let localOrdersMemory: Order[] = [];
 
@@ -137,15 +137,24 @@ export class OrderService {
     const sets = await this.getSetsWithSizes();
     const customer = customers.find((c) => c.id === params.customerId);
 
-    // Compute Item-wise rows
+    // Compute Item-wise rows & stock availability
     const generatedOrderItems: OrderItem[] = [];
     let subtotal = 0;
     let totalQuantity = 0;
+    let totalShortage = 0;
+    let totalReserved = 0;
 
     for (const itemDraft of params.items) {
       const product = products.find((p) => p.id === itemDraft.productId);
       const setObj = sets.find((s) => s.id === itemDraft.setId);
       const variant = product?.variants?.find((v) => v.id === itemDraft.variantId);
+
+      // Check stock availability
+      const availCheck = await FinishedGoodsService.checkStockAvailability(
+        itemDraft.productId,
+        itemDraft.setId,
+        itemDraft.sizeQuantities
+      );
 
       for (const [sizeId, qty] of Object.entries(itemDraft.sizeQuantities)) {
         if (qty > 0) {
@@ -155,6 +164,14 @@ export class OrderService {
 
           subtotal += qty * lineRate;
           totalQuantity += qty;
+
+          const sizeAvail = availCheck.sizes.find((s) => s.sizeId === sizeId);
+          const dispatchable = sizeAvail ? sizeAvail.dispatchableStock : 0;
+          const shortage = Math.max(0, qty - dispatchable);
+          const reserved = Math.min(qty, dispatchable);
+
+          totalShortage += shortage;
+          totalReserved += reserved;
 
           generatedOrderItems.push({
             productId: itemDraft.productId,
@@ -169,14 +186,33 @@ export class OrderService {
             unitRate: lineRate,
             taxRate: itemDraft.taxRate,
             lineTotal,
+            availableStock: dispatchable,
+            reservedStock: reserved,
+            shortageQuantity: shortage,
           });
         }
       }
     }
 
+    let fulfillmentStatus: OrderFulfillmentStatus = 'FULLY_AVAILABLE';
+    if (totalShortage > 0) {
+      fulfillmentStatus = totalReserved > 0 ? 'PARTIALLY_AVAILABLE' : 'SHORTAGE';
+    }
+
+    let calculatedSubtotal = subtotal;
+    const discountAmount = Number(params.discountAmount || 0);
+    const taxableSubtotal = Math.max(0, calculatedSubtotal - discountAmount);
     const taxRate = 5;
-    const taxAmount = (subtotal * taxRate) / 100;
-    const grandTotal = subtotal + taxAmount;
+    const taxAmount = (taxableSubtotal * taxRate) / 100;
+    const grandTotal = taxableSubtotal + taxAmount;
+    const paidAmount = Number(params.paidAmount || 0);
+
+    let paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID' = params.paymentStatus || 'UNPAID';
+    if (paidAmount >= grandTotal && grandTotal > 0) {
+      paymentStatus = 'PAID';
+    } else if (paidAmount > 0) {
+      paymentStatus = 'PARTIAL';
+    }
 
     const newOrder: Order = {
       id: crypto.randomUUID(),
@@ -186,15 +222,18 @@ export class OrderService {
       orderDate: params.orderDate,
       deliveryDate: params.deliveryDate,
       status: params.status || 'CONFIRMED',
+      fulfillmentStatus,
       priority: params.priority || 'NORMAL',
-      paymentStatus: 'UNPAID',
+      paymentStatus,
       totalQuantity,
-      subtotal,
+      subtotal: calculatedSubtotal,
       taxRate,
       taxAmount,
-      discountAmount: 0,
+      discountAmount,
       grandTotal,
-      paidAmount: 0,
+      paidAmount,
+      shortageQuantity: totalShortage,
+      reservedQuantity: totalReserved,
       notes: params.notes,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -225,7 +264,9 @@ export class OrderService {
               subtotal: newOrder.subtotal,
               tax_rate: newOrder.taxRate,
               tax_amount: newOrder.taxAmount,
+              discount_amount: newOrder.discountAmount,
               grand_total: newOrder.grandTotal,
+              paid_amount: newOrder.paidAmount,
               notes: newOrder.notes,
             })
             .select()
@@ -290,6 +331,28 @@ export class OrderService {
       await LocalStorageManager.enqueueOfflineMutation('orders', 'INSERT', newOrder as unknown as Record<string, unknown>);
     }
 
+    // 2. Perform Live Stock Reservation & Shortage Replenishment Setup
+    if (newOrder.status === 'CONFIRMED' || (newOrder.status as string) === 'ACTIVE') {
+      await FinishedGoodsService.reserveStockForOrder(newOrder.id, newOrder.orderItems || []);
+
+      // If shortages exist, record Replenishment Requirements
+      for (const item of generatedOrderItems) {
+        if (item.shortageQuantity && item.shortageQuantity > 0) {
+          await FinishedGoodsService.createProductionRequirement({
+            orderId: newOrder.id,
+            orderNumber: newOrder.orderNumber,
+            customerName: customer?.name,
+            productId: item.productId,
+            setId: item.setId,
+            sizeId: item.sizeId,
+            requiredQuantity: item.shortageQuantity,
+            priority: newOrder.priority || 'HIGH',
+            notes: `Shortage replenishment for Order ${newOrder.orderNumber}`,
+          });
+        }
+      }
+    }
+
     // Cache locally
     localOrdersMemory.unshift(newOrder);
     await LocalStorageManager.cacheItems('orders', localOrdersMemory);
@@ -297,12 +360,19 @@ export class OrderService {
     return newOrder;
   }
 
-  // 6. Update Order Status (e.g. Draft -> Confirmed, or Cancelled)
+  // 6. Update Order Status (e.g. Draft -> Confirmed -> In Production -> Ready for Dispatch -> Completed / Cancelled)
   static async updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
     const order = localOrdersMemory.find((o) => o.id === orderId);
     if (order) {
       order.status = status;
       order.updatedAt = new Date().toISOString();
+    }
+
+    // If cancelled, release stock reservation
+    if (status === 'CANCELLED') {
+      await FinishedGoodsService.releaseOrderReservation(orderId);
+    } else if (status === 'CONFIRMED' && order?.orderItems) {
+      await FinishedGoodsService.reserveStockForOrder(orderId, order.orderItems);
     }
 
     if (isSupabaseConfigured && navigator.onLine) {
@@ -323,6 +393,49 @@ export class OrderService {
     }
 
     await LocalStorageManager.cacheItems('orders', localOrdersMemory);
+  }
+
+  // 7. Update Order Payment Details
+  static async updateOrderPayment(orderId: string, paidAmount: number, notes?: string): Promise<Order | null> {
+    const order = localOrdersMemory.find((o) => o.id === orderId);
+    const newPaid = Math.max(0, Number(paidAmount));
+    let paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID' = 'UNPAID';
+    
+    if (order) {
+      if (newPaid >= order.grandTotal && order.grandTotal > 0) {
+        paymentStatus = 'PAID';
+      } else if (newPaid > 0) {
+        paymentStatus = 'PARTIAL';
+      }
+      order.paidAmount = newPaid;
+      order.paymentStatus = paymentStatus;
+      order.updatedAt = new Date().toISOString();
+    }
+
+    if (isSupabaseConfigured && navigator.onLine) {
+      try {
+        await supabase.from('orders').update({
+          paid_amount: newPaid,
+          payment_status: paymentStatus,
+          updated_at: new Date().toISOString(),
+        }).eq('id', orderId);
+
+        await supabase.from('audit_logs').insert({
+          action: 'UPDATE_ORDER_PAYMENT',
+          entity: 'Order',
+          entity_id: orderId,
+          new_value: { paid_amount: newPaid, payment_status: paymentStatus, notes },
+        });
+      } catch (err) {
+        console.warn('Supabase payment update error:', err);
+        await LocalStorageManager.enqueueOfflineMutation('orders', 'UPDATE', { id: orderId, paid_amount: newPaid, payment_status: paymentStatus });
+      }
+    } else {
+      await LocalStorageManager.enqueueOfflineMutation('orders', 'UPDATE', { id: orderId, paid_amount: newPaid, payment_status: paymentStatus });
+    }
+
+    await LocalStorageManager.cacheItems('orders', localOrdersMemory);
+    return order || null;
   }
 
   // 7. Quick Create Customer during Order Placement
@@ -349,18 +462,40 @@ export class OrderService {
   }
 
   static async deleteOrder(orderId: string): Promise<void> {
+    // 1. Release any active stock reservations
+    try {
+      await FinishedGoodsService.releaseOrderReservation(orderId);
+    } catch (e) {
+      console.warn('Could not release stock reservation:', e);
+    }
+
     localOrdersMemory = localOrdersMemory.filter((o) => o.id !== orderId);
 
     if (isSupabaseConfigured && navigator.onLine) {
       try {
+        // 2. Cascade delete associated dispatches
+        await supabase.from('dispatches').delete().eq('order_id', orderId);
+
+        // 3. Unlink any production orders that reference this order (preserving batches)
+        await supabase.from('production_orders').update({ order_id: null }).eq('order_id', orderId);
+
+        // 4. Delete order items
         await supabase.from('order_items').delete().eq('order_id', orderId);
+
+        // 5. Delete the order itself
         const { error } = await supabase.from('orders').delete().eq('id', orderId);
         if (error) throw error;
-        await supabase.from('audit_logs').insert({
-          action: 'DELETE_ORDER',
-          entity: 'Order',
-          entity_id: orderId,
-        });
+
+        // 6. Log audit entry
+        try {
+          await supabase.from('audit_logs').insert({
+            action: 'DELETE_ORDER',
+            entity: 'Order',
+            entity_id: orderId,
+          });
+        } catch (auditErr) {
+          console.warn('Audit log write error:', auditErr);
+        }
       } catch (err: any) {
         console.error('Supabase deleteOrder error:', err);
         throw new Error(`Failed to delete order: ${err?.message || 'Unknown error'}`);

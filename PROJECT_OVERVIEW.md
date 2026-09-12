@@ -1,179 +1,173 @@
-# 🏭 Factory AI Manager — Complete Project Documentation & Architecture Guide
+  # 🏭 Shree Raas Krishnam Creation — Factory AI Manager
+  ## Complete Project Overview & Master Guide
 
-> **Enterprise-Grade Garment Manufacturing & Factory Operations Management System (ERP)**  
-> Built with **React 18, TypeScript, Vite, Tailwind CSS, and Supabase (PostgreSQL with Row Level Security)**.
+  > **Enterprise-Grade Garment Manufacturing & Factory Intelligence ERP**  
+  > Built with **React 18, TypeScript, Vite, Tailwind CSS, Supabase PostgreSQL, and Google Gemini 1.5 Flash AI Engine**.
 
----
+  ---
 
-## 📌 1. Project Overview & Business Purpose
+  ## 📌 1. Business Problem & Mission
 
-### 1.1. Problem Statement in Garment Manufacturing
-Traditional garment manufacturing units and apparel factories face unique operational challenges:
-- **Complex Size-Set Hierarchy**: Unlike standard retail where an item is sold as a single SKU, garment factories manufacture and sell in **Sets** containing multiple **Sizes** (e.g., *Standard Set: 38, 40, 42, 44, 46* or *Extra Set: 48, 50, 52*).
-- **Floor-Level Production Bottlenecks**: Garments move through sequential production stages (**Cutting ➔ Stitching ➔ Finishing ➔ Quality Check (QC) ➔ Packing**). Losses or delays at any stage derail delivery schedules.
-- **Dynamic Raw Material Consumption**: Fabric, threads, zippers, and buttons must be tracked in real-time to prevent production stoppages.
-- **Financial Tracking & GST**: Tracking receivables from wholesale buyers, payables to raw material suppliers, and daily operational overheads.
+  ### 1.1. Garment Industry Operational Challenges
+  Garment manufacturing facilities operate under distinct operational and financial dynamics:
+  - **Complex Size-Set Hierarchy**: Apparel is manufactured and sold in **Sets** containing multiple **Sizes** (e.g., *Standard Set: 38–46*, *Extra Set: 48–52*, *Kids Set: 24–32*), requiring multi-dimensional size matrices.
+  - **Sequential Production Pipelines**: Work-in-progress moves across multiple stages (**Cutting ➔ Stitching ➔ Finishing ➔ QC & Rejection ➔ Packing ➔ Dispatch**). Shop-floor losses or bottlenecks directly jeopardize delivery commitments.
+  - **Dynamic Raw Material Consumption**: Fabric, threads, buttons, and trims must be tracked in real-time to avoid line stoppages.
+  - **Financial Balances & GST**: Wholesale receivables, supplier payables, overhead vouchers, and 5% garment GST reconciliation.
+  - **Shop-Floor Decision Making**: Factory owners and floor managers require instant factual answers on delayed orders, bottleneck stages, and fabric lay plan estimations.
 
-### 1.2. The Solution: Factory AI Manager
-**Factory AI Manager** is a full-stack, production-ready enterprise operating system tailored specifically for garment manufacturing facilities. It brings every aspect of factory operations into a single real-time dashboard powered by **100% live database synchronization**.
+  ### 1.2. The Solution: Factory AI Manager
+  **Factory AI Manager** delivers a cloud-native, responsive ERP system tailored specifically for **Shree Raas Krishnam Creation**, unifying 17 core modules into a single real-time dashboard backed by **100% live database synchronization** and **Google Gemini RAG AI intelligence**.
 
----
+  ---
 
-## 🏗️ 2. Core Architecture & Technology Stack
+  ## 🏗️ 2. High-Level Architecture & Tech Stack
 
-```
-                                    ┌──────────────────────────────────────────────────┐
-                                    │               Browser Client (React 18)          │
-                                    │    Vite + TypeScript + TailwindCSS + Zustand     │
-                                    └────────┬─────────────────────────────────┬───────┘
-                                             │                                 │
-                                   (Direct Query / REST)             (IndexedDB Cache & Outbox)
-                                             │                                 │
-                                             ▼                                 ▼
-                                    ┌──────────────────┐              ┌────────────────┐
-                                    │ Supabase Cloud   │              │ Offline Local  │
-                                    │ (PostgreSQL 15)  │              │ Storage Engine │
-                                    │  - Row Security  │              └────────────────┘
-                                    │  - Relational FK │
-                                    │  - Live DB Sync  │
-                                    └──────────────────┘
-```
+  ```
+                                ┌────────────────────────────────────────────────────────┐
+                                │            Browser Client (React 18 + Vite + TS)       │
+                                │   Responsive UI (320px–4K) + Mobile Drawer + Tailwind  │
+                                └───────────┬────────────────────────────────┬───────────┘
+                                            │                                │
+                                (Live REST / RPC / Queries)      (IndexedDB Cache & Outbox)
+                                            │                                │
+                                            ▼                                ▼
+                                ┌────────────────────────┐      ┌────────────────────────┐
+                                │ Supabase PostgreSQL 15 │      │ Local Storage Mirror   │
+                                │  - 20+ Master Tables   │      │  - Offline Mutation    │
+                                │  - Row Level Security  │      │    Auto-Flush Queue    │
+                                │  - Relational FKs      │      └────────────────────────┘
+                                └───────────┬────────────┘
+                                            │
+                                ┌───────────▼────────────┐
+                                │ Google Gemini 1.5 Flash│
+                                │  - Live Database RAG   │
+                                │  - Executive Briefing  │
+                                │  - Fabric Lay Plan Calc│
+                                │  - QC Defect Diagnosis │
+                                └────────────────────────┘
+  ```
 
-### 2.1. Frontend Stack
-- **Framework**: [React 18](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/package.json) with TypeScript for type-safe business logic.
-- **Bundler & Build Tool**: [Vite](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/vite.config.ts) for instant HMR and optimized production bundles.
-- **Styling**: [Tailwind CSS](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/tailwind.config.js) with customized industrial dark-mode color palettes (slate, factory-charcoal, emerald, amber, rose).
-- **State Management & Data Fetching**:
-  - `@tanstack/react-query`: Declarative server-state caching, automatic refetching, and mutation handling.
-  - `zustand`: Lightweight global state for authentication and active session management.
-- **Icons & UI Assets**: `lucide-react` for clean, professional iconography.
+  ### 2.1. Frontend Stack
+  - **Framework**: React 18 with TypeScript for end-to-end type safety.
+  - **Bundler**: Vite 6 for lightning-fast HMR and optimized production bundles.
+  - **Styling**: Tailwind CSS with industrial dark-mode design system.
+  - **State Management & Caching**:
+    - `@tanstack/react-query`: Declarative server-state caching, automatic cache invalidation, and optimistic mutations.
+    - `zustand`: Session and authentication state.
+  - **Icons**: `lucide-react` icons.
 
-### 2.2. Backend & Database Stack
-- **Database**: **Supabase PostgreSQL** with structured schemas, foreign key constraints, and cascade protections.
-- **Security & Authorization**: **Row Level Security (RLS)** applied across all tables (`anon` and `authenticated` roles).
-- **Data Integrity**: Append-only auditing for `audit_logs` and `inventory_transactions` to guarantee financial and inventory traceability.
+  ### 2.2. Backend & Intelligence Stack
+  - **Database**: Supabase PostgreSQL 15 with relational constraints, foreign keys, and RLS policies.
+  - **AI Reasoning Engine**: Google Gemini 1.5 Flash via live database RAG (Retrieval-Augmented Generation), securely compiling live orders, production batches, raw material inventory, and ledger state.
 
----
+  ---
 
-## 🗂️ 3. Garment Business Hierarchy (Set & Size Model)
+  ## 🗂️ 3. Apparel Domain Hierarchy (Set & Size Model)
 
-The core data model mirrors actual apparel industry manufacturing workflows:
+  ```
+    ┌─────────────────────────────────────────────────────────────────┐
+    │                         PRODUCT MASTER                          │
+    │     e.g., "Premium Cotton Kurti Pant Coordination Set"         │
+    └────────────────────────────────┬────────────────────────────────┘
+                                    │ (Linked via product_sets)
+                                    ▼
+    ┌─────────────────────────────────────────────────────────────────┐
+    │                          PRODUCT SETS                           │
+    │   - Standard Set (Code: SET-STD)  ➔ Sizes: 38, 40, 42, 44, 46   │
+    │   - Extra / Plus Set (SET-EXT)    ➔ Sizes: 48, 50, 52           │
+    │   - Kids / Junior Set (SET-KIDS)  ➔ Sizes: 24, 26, 28, 30, 32   │
+    │   - Alpha Sizing Set (SET-ALPHA)  ➔ Sizes: S, M, L, XL, XXL     │
+    └────────────────────────────────┬────────────────────────────────┘
+                                    │ (Mapped via set_sizes)
+                                    ▼
+    ┌─────────────────────────────────────────────────────────────────┐
+    │                       SIZES & MEASUREMENTS                      │
+    │   - Size 38: Chest 38", Waist 34", Length 29", Sequence #1      │
+    │   - Size 40: Chest 40", Waist 36", Length 30", Sequence #2      │
+    │   - Size 42: Chest 42", Waist 38", Length 30.5", Sequence #3    │
+    │   - Size 44: Chest 44", Waist 40", Length 31", Sequence #4      │
+    │   - Size 46: Chest 46", Waist 42", Length 31.5", Sequence #5    │
+    └─────────────────────────────────────────────────────────────────┘
+  ```
 
-```
-  ┌────────────────────────────────────────────────────────┐
-  │                    PRODUCT MASTER                      │
-  │     e.g., "Men's Premium Oxford Cotton Shirt"          │
-  └──────────────────────────┬─────────────────────────────┘
-                             │ (1-to-many / many-to-many)
-                             ▼
-  ┌────────────────────────────────────────────────────────┐
-  │                   PRODUCT SETS                         │
-  │   - Standard Set (Code: SET-STD)                       │
-  │   - Extra / Plus Set (Code: SET-EXT)                   │
-  │   - Kids / Junior Set (Code: SET-KIDS)                 │
-  └──────────────────────────┬─────────────────────────────┘
-                             │ (Links through set_sizes)
-                             ▼
-  ┌────────────────────────────────────────────────────────┐
-  │                  SIZES (Dimensioned)                   │
-  │   - Size 38 (Chest: 38", Waist: 34", Length: 29")      │
-  │   - Size 40 (Chest: 40", Waist: 36", Length: 30")      │
-  │   - Size 42 (Chest: 42", Waist: 38", Length: 30.5")    │
-  │   - Size 44 (Chest: 44", Waist: 40", Length: 31")      │
-  │   - Size 46 (Chest: 46", Waist: 42", Length: 31.5")    │
-  └────────────────────────────────────────────────────────┘
-```
+  ---
 
-### 3.1. Smart Presets & Inline Size Addition
-When creating or editing garment sets:
-- **Pre-Seeded Master Sizes Palette**: 22+ standard garment sizes (24 to 52, S, M, L, XL, XXL, 3XL, Free Size) are available instantly.
-- **1-Click Presets**:
-  - `Standard (38-46)`
-  - `Plus Size (48-52)`
-  - `Kids Run (24-32)`
-  - `Alpha (S-XXL)`
-- **Inline Custom Size Adder**: Add custom non-standard sizes (`+ Add Size`) right inside the modal without leaving your workflow.
+  ## 💻 4. Comprehensive Breakdown of All 17 Modules
 
----
+  ### 4.1. 📊 Executive Dashboard (`/dashboard`)
+  - **Real-Time KPIs**: Active Orders, Today's Finished Output (pcs), Market Receivables, Low Stock SKU alerts.
+  - **AI Executive Briefing**: Real-time natural language briefing synthesized from live database state.
+  - **Live Streams**: Recent customer wholesale orders and active production floor runs.
 
-## 💻 4. Comprehensive Breakdown of All 15 Modules
+  ### 4.2. 🛒 Garment Orders & Size Matrix (`/orders`)
+  - **Wholesale Order Booking**: Multi-product, multi-set, and 2D size-matrix piece breakdown with live line rate and GST calculation.
+  - **Status Progression**: `DRAFT` ➔ `CONFIRMED` ➔ `IN_PRODUCTION` ➔ `READY_FOR_DISPATCH` ➔ `COMPLETED`.
+  - **CRUD**: Full Create, View Size Breakdown, Status Confirmation, and Safe Deletion.
 
-### 4.1. Dashboard (`/dashboard`)
-- **Key Performance Indicators (KPIs)**: Total production pieces passed today, rejected pieces, pending orders, delayed delivery count, dispatches today, and critical low-stock alerts.
-- **AI Plant Summary**: Real-time rule-based operations analysis highlighting floor bottlenecks and urgent actions.
+  ### 4.3. ⚙️ Production Shop-Floor Management (`/production`)
+  - **Stage Pipeline Kanban & Table**: 7-stage sequential pipeline (**Cutting, Stitching, Washing, Finishing, Quality Check, Packing, Dispatch Ready**).
+  - **Floor Output & QC Logging**: Size-wise passed pieces, rejected pieces, defect categorization, and operator attribution.
+  - **Delay Alerts**: Automated detection of production orders behind schedule.
 
-### 4.2. Customer Master (`/customers`)
-- **Firm Management**: Wholesale clients, retail chains, and garment distributors.
-- **Attributes**: Customer code, firm name, contact person, phone, email, billing/shipping address, GST number, credit limits, and payment term days.
-- **CRUD**: Full Create, View Specifications, Edit Firm Details, and Delete Customer with confirmation.
+  ### 4.4. 📦 Raw Material & Stock Ledger (`/inventory`)
+  - **Live Stock Balances**: Fabrics, Threads, Buttons, Zippers, Packaging materials, and Finished Goods.
+  - **Stock Movement Modal**: Stock In (procurement/returns) and Stock Out (floor issue/sales).
+  - **Immutable Ledger**: Append-only transaction log for every stock event.
 
-### 4.3. Supplier Master (`/suppliers`)
-- **Vendor Directory**: Fabric textile mills, yarn spinners, trims & button vendors, packaging suppliers.
-- **CRUD**: Full Create, Edit Vendor, and Delete Supplier capabilities.
+  ### 4.5. 🛍️ Procurement & Inward Dock (`/purchases`)
+  - **Purchase Orders (POs)**: Supplier selection, line-item materials, unit costs, and expected dock arrival dates.
+  - **Dock Receiving**: Inward workflow that auto-updates raw material stock levels.
 
-### 4.4. Products Catalog (`/products`)
-- **Garment Styles**: Tech-pack specs, fabric composition, cost price, wholesale selling price, calculated gross margin %, and assigned size sets.
-- **Views**: Table and Visual Grid views with style thumbnail rendering.
-- **CRUD**: Create Product, Edit Tech-Pack, Toggle Active Status, and Delete Product.
+  ### 4.6. 🚚 Dispatch & Logistics (`/dispatch`)
+  - **Shipping Manifests**: Consignment note generation, transporter name, LR/tracking number, carton counts, and delivery tracking.
 
-### 4.5. Sets & Sizes Master (`/sets-sizes`)
-- **Garment Sets Master**: Set codes, categories (Adult, Plus, Kids, Custom), assigned sizes runs, and total size counts.
-- **Sizes Master**: Standard garment sizing with chest, waist, and length measurements.
-- **CRUD**: Edit and Delete support across both Sets and Sizes tabs.
+  ### 4.7. 👗 Products & Tech Packs (`/products`)
+  - **Style Catalog**: Tech pack specifications, fabric composition, cost price, wholesale selling price, calculated gross profit margin %, and assigned sets.
+  - **View Modes**: Interactive Table View and Visual Style Card Grid View.
 
-### 4.6. Garment Orders (`/orders`)
-- **Wholesale Order Booking**: Multi-product, multi-set, and 2D size-matrix piece breakdown.
-- **Pricing & Taxes**: Automatic line total calculation, subtotal, 5% garment GST, and grand total.
-- **CRUD**: Create Order, View Size Matrix Breakdown, Confirm Drafts, and Delete Orders with cascading item removal.
+  ### 4.8. 📐 Sets & Sizes Master (`/sets-sizes`)
+  - **Sets Configuration**: Define custom ratio groupings (Standard, Plus, Kids, Alpha).
+  - **Sizes Master**: Chest, waist, length dimensions, sequence numbers, and status toggle.
 
-### 4.7. Production Floor Management (`/production`)
-- **5-Stage Sequential Pipeline**:
-  1. `CUTTING`: Fabric spreading, marker layout, cut piece tally.
-  2. `STITCHING`: Assembly line sewing progress.
-  3. `FINISHING`: Washing, ironing, thread trimming.
-  4. `QUALITY_CHECK`: Strict defect classification and rejection logging.
-  5. `PACKING`: Polybag packing, tagging, and carton boxing.
-- **Floor Logging**: Log production entries with operator name, machine ID, passed pieces, and rejected pieces with defect reasons.
+  ### 4.9. 👥 Customer Directory (`/customers`)
+  - **Wholesale Client Profiles**: Business name, contact person, phone, email, GSTIN, credit limits, and payment terms.
 
-### 4.8. Raw Material Inventory (`/inventory`)
-- **SKU Ledger**: Raw materials (Fabric, Thread, Buttons, Zippers, Packaging) and Finished Goods.
-- **Stock Movements**: Real-time In/Out adjustment modal and immutable stock transaction ledger.
-- **CRUD**: Add Item, Edit SKU Details, Adjust Stock, and Delete Item.
+  ### 4.10. 🏭 Supplier Directory (`/suppliers`)
+  - **Vendor Master**: Fabric textile mills, yarn spinners, trims, and packaging suppliers with contact and bank details.
 
-### 4.9. Procurement & Purchase Orders (`/purchases`)
-- **Vendor POs**: PO number, supplier selection, item line-items, tax rates, and expected dock delivery dates.
-- **Dock Receiving**: Inward receiving workflow that automatically posts into the immutable inventory stock ledger.
-- **CRUD**: Create PO, Receive Dock Inward, and Delete PO.
+  ### 4.11. 💳 Payments & Cashflow (`/payments`)
+  - **Financial Ledger**: Inward customer receipts and outward vendor payouts with payment mode (NEFT, UPI, Cheque, Cash) and UTR tracking.
 
-### 4.10. Dispatches & Logistics (`/dispatch`)
-- **Consignment Tracking**: Dispatch note generation, transporter name, vehicle/tracking number, carton counts, and shipment status (**DRAFT ➔ DISPATCHED ➔ DELIVERED**).
+  ### 4.12. 📑 Operating Expenses (`/expenses`)
+  - **Factory Overheads**: Electricity, machine maintenance, rent, needles/spares, staff welfare, and freight logging.
 
-### 4.11. Payments & Receivables (`/payments`)
-- **Financial Ledger**: Inward customer receipts and outward supplier payouts, payment mode (NEFT/RTGS, UPI, Cheque, Cash), and reference tracking.
+  ### 4.13. 📈 Reports & Business Analytics (`/reports`)
+  - **Management Reporting**: Sales by customer, production stage efficiency, QC pass rates, inventory valuation, and cashflow with CSV export.
 
-### 4.12. Operating Expenses (`/expenses`)
-- **Factory Overheads**: Factory electricity, generator diesel, machine maintenance, needles & spares, staff tea & snacks, and rent tracking with category breakdowns.
+  ### 4.14. 🤖 AI Factory Intelligence Engine (`/ai-manager`)
+  - **Live Query Shell**: Grounded bilingual (Hindi/English) conversational assistant querying live PostgreSQL database via Gemini 1.5 Flash.
+  - **AI Executive Daily Briefing**: Comprehensive daily factory summary with operational health score and actionable priorities.
+  - **Fabric & Sizing Lay Plan Estimator**: Exact meter consumption calculation based on size matrix breakdown with 5% cutting wastage buffer.
+  - **QC Defect Root-Cause Analyzer**: Stage-wise defect root-cause analysis with preventive corrective action plans.
+  - **RAG Database Context Inspector**: Live transparency viewer showing active context compiled from PostgreSQL.
 
-### 4.13. Factory Analytics & Reports (`/reports`)
-- **Executive BI**: Monthly production volume charts, rejection rate analytics, top garment style sales, and revenue vs expenses financial reconciliation.
+  ### 4.15. 🔔 Notifications & Alert Center (`/notifications`)
+  - **Automated Alerts**: Low stock warnings, production delay alerts, uncollected receivables, and overdue delivery notices.
 
-### 4.14. Notifications Hub (`/notifications`)
-- **Real-Time Operational Alerts**: Delayed order warnings, critical raw material stock alerts, QC rejection spikes, and system event feeds.
+  ### 4.16. ⚙️ System Settings & RBAC (`/settings`)
+  - **Enterprise Profile**: Persistent legal entity name, premises address, GST number, currency, and tax rates.
+  - **Staff Directory**: Role-Based Access Control (RBAC) user management and immutable audit trails.
 
-### 4.15. System & Factory Settings (`/settings`)
-- **Factory Profile**: Persistent legal entity name, manufacturing premises address, and GST number with database synchronization.
-- **Currency & Tax**: Currency symbol (₹) and default garment GST tax rate (5%).
-- **Users & RBAC Directory**: Active staff directory with role assignments, user creation, and user deletion.
-- **AI Config**: LLM model provider (Gemini, OpenAI, Anthropic) and API key configuration.
-- **Audit Logs**: Immutable log trail of all user actions, logins, and setting modifications.
+  ### 4.17. 🔐 Authentication & Session (`/login`)
+  - **Secure Access**: Role-based routing and session persistence for factory staff and management.
 
----
+  ---
 
-## 🔐 5. Security & Authentication
+  ## 📱 5. Responsive UI Implementation
 
-- **Master Factory Owner**:
-  - Email: `kavyakhandelwal57@gmail.com`
-  - Password: `asa`
-  - Role: `OWNER` (Full Administrative & Operational Permissions)
-- **Role-Based Authorization**: System permissions strictly checked on navigation routes and actionable UI buttons based on active user role.
-- **Protected Master Account**: Deletion protection safeguards the primary Factory Owner account.
+  - **Zero Page-Level Horizontal Overflow**: Guaranteed across all mobile, tablet, and desktop viewports (320px up to 1920px+).
+  - **Mobile Drawer Navigation**: Slide-out drawer on `< lg` screens with touch-friendly navigation items and auto-close.
+  - **Internal Table Scrolling**: All tabular data is wrapped in dedicated `overflow-x-auto` containers with sticky headers.
+  - **Adaptive Modals**: All modals auto-scale down to 320px with internal vertical scrolling and safe gutters.
+  - **Touch-Friendly Controls**: Interactive elements configured with $\ge 44\text{px}$ touch targets.
