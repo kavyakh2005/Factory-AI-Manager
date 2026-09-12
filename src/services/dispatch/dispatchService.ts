@@ -5,7 +5,7 @@ import { OrderService } from '../orders/orderService';
 import { InventoryService } from '../inventory/inventoryService';
 import { FinishedGoodsService } from '../inventory/finishedGoodsService';
 
-let localDispatches: Dispatch[] = [];
+let localDispatches: Dispatch[] = LocalStorageManager.getSyncItems<Dispatch>('dispatches', []);
 
 export class DispatchService {
   static async getDispatches(filters?: { status?: string; search?: string }): Promise<Dispatch[]> {
@@ -43,6 +43,13 @@ export class DispatchService {
         }
       } catch (err) {
         console.warn('Dispatch query error, using local fallback:', err);
+      }
+    }
+
+    if (localDispatches.length === 0) {
+      const cached = await LocalStorageManager.getCachedItems<Dispatch>('dispatches', []);
+      if (cached && cached.length > 0) {
+        localDispatches = cached;
       }
     }
 

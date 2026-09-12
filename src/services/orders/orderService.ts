@@ -5,7 +5,7 @@ import { ProductService } from '../products/productService';
 import { CustomerService } from '../customers/customerService';
 import { FinishedGoodsService } from '../inventory/finishedGoodsService';
 
-let localOrdersMemory: Order[] = [];
+let localOrdersMemory: Order[] = LocalStorageManager.getSyncItems<Order>('orders', []);
 
 export class OrderService {
   // 1. Fetch Customers
@@ -102,6 +102,13 @@ export class OrderService {
         if (navigator.onLine && err?.message?.includes('Supabase')) {
           throw err;
         }
+      }
+    }
+
+    if (localOrdersMemory.length === 0) {
+      const cached = await LocalStorageManager.getCachedItems<Order>('orders');
+      if (cached && cached.length > 0) {
+        localOrdersMemory = cached;
       }
     }
 

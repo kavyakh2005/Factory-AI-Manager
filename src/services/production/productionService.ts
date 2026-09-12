@@ -38,14 +38,7 @@ export const DEFAULT_REJECTION_REASONS: RejectionReason[] = [
   { id: 'rej-9', name: 'Other Defect', code: 'REJ-OTH-09', category: 'GENERAL', description: 'Uncategorized factory floor fault', sortOrder: 9, isActive: true },
 ];
 
-// In-Memory fallback store for instant offline responsiveness
-let localProductionOrders: ProductionOrder[] = [];
-try {
-  const saved = localStorage.getItem('factory_production_orders');
-  if (saved) {
-    localProductionOrders = JSON.parse(saved);
-  }
-} catch {}
+let localProductionOrders: ProductionOrder[] = LocalStorageManager.getSyncItems<ProductionOrder>('production_orders', []);
 
 export class ProductionService {
   // 1. Fetch Stages

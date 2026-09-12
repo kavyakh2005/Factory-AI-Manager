@@ -6,7 +6,7 @@ import { SupplierService } from '../suppliers/supplierService';
 import { OrderService } from '../orders/orderService';
 import { PurchaseService } from '../purchases/purchaseService';
 
-let localPayments: Payment[] = [];
+let localPayments: Payment[] = LocalStorageManager.getSyncItems<Payment>('payments', []);
 
 export class PaymentService {
   static async getPayments(filters?: { paymentType?: string; search?: string }): Promise<Payment[]> {
@@ -51,6 +51,13 @@ export class PaymentService {
         }
       } catch (err) {
         console.warn('Payment query failed, using local ledger:', err);
+      }
+    }
+
+    if (localPayments.length === 0) {
+      const cached = await LocalStorageManager.getCachedItems<Payment>('payments', []);
+      if (cached && cached.length > 0) {
+        localPayments = cached;
       }
     }
 

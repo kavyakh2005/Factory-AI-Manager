@@ -4,7 +4,7 @@ import { PurchaseOrder, CreatePurchaseOrderInput, Supplier } from '../../types';
 import { SupplierService } from '../suppliers/supplierService';
 import { InventoryService } from '../inventory/inventoryService';
 
-let localPurchaseOrders: PurchaseOrder[] = [];
+let localPurchaseOrders: PurchaseOrder[] = LocalStorageManager.getSyncItems<PurchaseOrder>('purchase_orders', []);
 
 export class PurchaseService {
   static async getPurchaseOrders(filters?: { status?: string; search?: string }): Promise<PurchaseOrder[]> {
@@ -61,19 +61,27 @@ export class PurchaseService {
               taxRate: Number(poi.tax_rate || 5),
               lineTotal: Number(poi.line_total),
               receivedQuantity: Number(poi.received_quantity || 0),
+              rejectedQuantity: Number(poi.rejected_quantity || 0),
             })),
             createdAt: po.created_at,
-            updatedAt: po.updated_at,
+            updatedAt: po.updated_at || po.created_at,
           }));
           localPurchaseOrders = mapped;
           LocalStorageManager.cacheItems('purchase_orders', mapped);
           return this.applyFilters(mapped, filters);
         }
       } catch (err: any) {
-        console.error('Purchase orders query exception:', err);
+        console.error('PO query exception:', err);
         if (navigator.onLine && err?.message?.includes('Supabase')) {
           throw err;
         }
+      }
+    }
+
+    if (localPurchaseOrders.length === 0) {
+      const cached = await LocalStorageManager.getCachedItems<PurchaseOrder>('purchase_orders', []);
+      if (cached && cached.length > 0) {
+        localPurchaseOrders = cached;
       }
     }
 

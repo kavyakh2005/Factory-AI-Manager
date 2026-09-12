@@ -9,7 +9,7 @@ import {
   InventoryTransactionType,
 } from '../../types';
 
-let localInventoryItems: InventoryItem[] = [];
+let localInventoryItems: InventoryItem[] = LocalStorageManager.getSyncItems<InventoryItem>('inventory', []);
 let localTransactionsMemory: InventoryTransaction[] = [];
 
 export class InventoryService {
@@ -98,6 +98,14 @@ export class InventoryService {
         }
       }
     }
+
+    if (localInventoryItems.length === 0) {
+      const cached = await LocalStorageManager.getCachedItems<InventoryItem>('inventory', []);
+      if (cached && cached.length > 0) {
+        localInventoryItems = cached;
+      }
+    }
+
     return this.applyFilters(localInventoryItems, filters);
   }
 

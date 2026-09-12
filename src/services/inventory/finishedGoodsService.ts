@@ -14,29 +14,14 @@ import {
   InventoryTransaction,
 } from '../../types';
 
-// In-Memory fallback caches for offline resilience & atomic consistency
-let localFinishedStock: FinishedGoodsStock[] = [];
-let localReservations: StockReservation[] = [];
-let localRequirements: ProductionRequirement[] = [];
-let localCartons: Carton[] = [];
-let localReturns: StockReturn[] = [];
+// In-Memory fallback caches for offline resilience & atomic consistency with 7-day retention
+let localFinishedStock: FinishedGoodsStock[] = LocalStorageManager.getSyncItems<FinishedGoodsStock>('finished_goods_stock', []);
+let localReservations: StockReservation[] = LocalStorageManager.getSyncItems<StockReservation>('stock_reservations', []);
+let localRequirements: ProductionRequirement[] = LocalStorageManager.getSyncItems<ProductionRequirement>('production_requirements', []);
+let localCartons: Carton[] = LocalStorageManager.getSyncItems<Carton>('cartons', []);
+let localReturns: StockReturn[] = LocalStorageManager.getSyncItems<StockReturn>('stock_returns', []);
 const processedPackingBatches = new Set<string>();
 const processedDispatchOrders = new Set<string>();
-
-// Load caches from localStorage on startup
-try {
-  const stockCache = localStorage.getItem('factory_finished_goods_stock');
-  if (stockCache) localFinishedStock = JSON.parse(stockCache);
-
-  const resCache = localStorage.getItem('factory_stock_reservations');
-  if (resCache) localReservations = JSON.parse(resCache);
-
-  const reqCache = localStorage.getItem('factory_production_requirements');
-  if (reqCache) localRequirements = JSON.parse(reqCache);
-
-  const rtnCache = localStorage.getItem('factory_stock_returns');
-  if (rtnCache) localReturns = JSON.parse(rtnCache);
-} catch {}
 
 const isUuid = (str?: string) =>
   !!str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);

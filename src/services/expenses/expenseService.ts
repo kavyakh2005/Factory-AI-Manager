@@ -2,7 +2,7 @@ import { supabase, isSupabaseConfigured } from '../supabase/client';
 import { LocalStorageManager } from '../storage/localDb';
 import { Expense, CreateExpenseInput } from '../../types';
 
-let localExpensesMemory: Expense[] = [];
+let localExpensesMemory: Expense[] = LocalStorageManager.getSyncItems<Expense>('expenses', []);
 
 export class ExpenseService {
   static async getExpenses(filters?: { category?: string; search?: string; startDate?: string; endDate?: string }): Promise<Expense[]> {
@@ -41,6 +41,14 @@ export class ExpenseService {
         console.warn('Expenses query failed, using local cache:', err);
       }
     }
+
+    if (localExpensesMemory.length === 0) {
+      const cached = await LocalStorageManager.getCachedItems<Expense>('expenses', []);
+      if (cached && cached.length > 0) {
+        localExpensesMemory = cached;
+      }
+    }
+
     return this.applyLocalFilters(localExpensesMemory, filters);
   }
 
