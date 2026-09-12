@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../supabase/client';
 import { LocalStorageManager } from '../storage/localDb';
 import { Customer, CreateCustomerInput, Order } from '../../types';
+import { sanitizeInput } from '../../utils/security';
 
 export const DEFAULT_FACTORY_CUSTOMERS: Customer[] = [
   {
@@ -125,19 +126,19 @@ export class CustomerService {
   }
 
   static async createCustomer(input: CreateCustomerInput): Promise<Customer> {
-    const code = input.customerCode?.trim().toUpperCase() || `CUST-${Math.floor(100 + Math.random() * 900)}`;
+    const code = sanitizeInput(input.customerCode || '').toUpperCase() || `CUST-${Math.floor(100 + Math.random() * 900)}`;
 
     const newCust: Customer = {
       id: `c-${Date.now()}`,
       customerCode: code,
-      name: input.name.trim(),
-      companyName: input.companyName?.trim(),
-      phone: input.phone.trim(),
-      email: input.email?.trim(),
-      address: input.address?.trim(),
-      city: input.city?.trim(),
-      state: input.state?.trim(),
-      gstNumber: input.gstNumber?.trim().toUpperCase(),
+      name: sanitizeInput(input.name),
+      companyName: sanitizeInput(input.companyName || ''),
+      phone: sanitizeInput(input.phone),
+      email: sanitizeInput(input.email || ''),
+      address: sanitizeInput(input.address || ''),
+      city: sanitizeInput(input.city || ''),
+      state: sanitizeInput(input.state || ''),
+      gstNumber: sanitizeInput(input.gstNumber || '').toUpperCase(),
       creditLimit: input.creditLimit ? Math.max(0, input.creditLimit) : 0,
       paymentTermsDays: input.paymentTermsDays || 30,
       status: input.status || 'ACTIVE',

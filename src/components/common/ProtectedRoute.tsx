@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert, AlertTriangle } from 'lucide-react';
 import { Button } from './Button';
+import { verifySecuritySignature, logSecurityEvent } from '../../utils/security';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -15,8 +16,50 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   module,
   roles,
 }) => {
-  const { isAuthenticated, user, hasPermission, hasRole } = useAuthStore();
+  const { isAuthenticated, user, hasPermission, hasRole, logout } = useAuthStore();
   const location = useLocation();
+  const [isTampered, setIsTampered] = useState(false);
+
+  // Anti-Tamper Session Integrity Check
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const storedSig = localStorage.getItem('factory_user_sig');
+      if (storedSig) {
+        verifySecuritySignature(user as unknown as Record<string, unknown>, storedSig).then((isValid) => {
+          if (!isValid) {
+            console.error('CRITICAL: Session integrity signature verification failed! LocalStorage was tampered.');
+            logSecurityEvent({
+              id: crypto.randomUUID(),
+              type: 'TAMPER_DETECTED',
+              details: `Session payload mismatch for ${user.email}. Terminating session.`,
+              timestamp: new Date().toISOString(),
+            });
+            setIsTampered(true);
+            logout();
+          }
+        });
+      }
+    }
+  }, [isAuthenticated, user, logout]);
+
+  if (isTampered) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20 mb-4 animate-bounce">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-rose-400">Security Alert: Session Integrity Violation</h2>
+        <p className="text-sm text-slate-400 max-w-md mt-2">
+          An unauthorized alteration to local session state or permissions was detected. Your session has been safely terminated.
+        </p>
+        <div className="mt-6">
+          <Button variant="danger" onClick={() => (window.location.href = '/login')}>
+            Return to Login
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" state={{ from: location }} replace />;

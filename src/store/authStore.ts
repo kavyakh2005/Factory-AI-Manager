@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 import { User, Role } from '../types';
 import { supabase, isSupabaseConfigured } from '../services/supabase/client';
+import {
+  verifyOwnerPassword,
+  sha256Hash,
+  generateSecuritySignature,
+  checkRateLimit,
+  recordFailedLoginAttempt,
+  resetRateLimit,
+  logSecurityEvent,
+} from '../utils/security';
 
 interface AuthState {
   user: User | null;
@@ -27,7 +36,6 @@ const DEFAULT_ROLES: Record<string, Role> = {
 };
 
 const MASTER_OWNER_EMAIL = 'kavyakhandelwal57@gmail.com';
-const MASTER_OWNER_PASSWORDS = ['Kavya@2005', 'asa'];
 
 export const useAuthStore = create<AuthState>((set, get) => {
   const storedUserJson = localStorage.getItem('factory_user');
@@ -49,14 +57,43 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
     login: async (email: string, password?: string) => {
       set({ isLoading: true });
-      try {
-        const cleanEmail = email.trim().toLowerCase();
+      const cleanEmail = email.trim().toLowerCase();
 
-        // 1. Master Factory Owner Verification
+      try {
+        // 1. Check Brute Force Protection / Rate Limiting
+        const rateLimitStatus = checkRateLimit(cleanEmail, 5, 15 * 60 * 1000);
+        if (!rateLimitStatus.allowed) {
+          const waitMins = Math.ceil(rateLimitStatus.retryAfterSeconds / 60);
+          logSecurityEvent({
+            id: crypto.randomUUID(),
+            type: 'RATE_LIMIT_LOCKOUT',
+            details: `Brute force attempt on account ${cleanEmail}. Blocked for ${waitMins} minutes.`,
+            timestamp: new Date().toISOString(),
+          });
+          throw new Error(
+            `Security Lockout: Too many failed login attempts. Please wait ${waitMins} minute(s) before trying again.`
+          );
+        }
+
+        // 2. Master Factory Owner Verification using Cryptographic SHA-256 Hash
         if (cleanEmail === MASTER_OWNER_EMAIL.toLowerCase()) {
-          if (password && !MASTER_OWNER_PASSWORDS.includes(password)) {
+          const isValidPass = password ? await verifyOwnerPassword(password) : false;
+          if (!isValidPass) {
+            const fail = recordFailedLoginAttempt(cleanEmail, 5, 15 * 60 * 1000);
+            logSecurityEvent({
+              id: crypto.randomUUID(),
+              type: 'LOGIN_FAILED',
+              details: `Invalid password attempt for Factory Owner account.`,
+              timestamp: new Date().toISOString(),
+            });
+            if (fail.locked) {
+              throw new Error('Security Lockout: Account locked for 15 minutes due to multiple failed attempts.');
+            }
             throw new Error('Incorrect password for Factory Owner account.');
           }
+
+          // Reset rate limit on success
+          resetRateLimit(cleanEmail);
 
           const ownerUser: User = {
             id: 'u-owner-kavya',
@@ -66,20 +103,48 @@ export const useAuthStore = create<AuthState>((set, get) => {
             role: DEFAULT_ROLES.OWNER,
           };
 
+          const signature = await generateSecuritySignature(ownerUser as unknown as Record<string, unknown>);
           localStorage.setItem('factory_user', JSON.stringify(ownerUser));
-          localStorage.setItem('factory_auth_token', 'jwt_session_owner_kavya');
-          set({ user: ownerUser, token: 'jwt_session_owner_kavya', isAuthenticated: true, isLoading: false });
+          localStorage.setItem('factory_user_sig', signature);
+          localStorage.setItem('factory_auth_token', `jwt_session_owner_${Date.now()}`);
+
+          logSecurityEvent({
+            id: crypto.randomUUID(),
+            type: 'LOGIN_SUCCESS',
+            details: `Owner ${cleanEmail} authenticated successfully.`,
+            timestamp: new Date().toISOString(),
+          });
+
+          set({ user: ownerUser, token: `jwt_session_owner_${Date.now()}`, isAuthenticated: true, isLoading: false, currentRole: { role: 'OWNER' } });
           return;
         }
 
-        // 2. Custom Registered Factory User Verification
+        // 3. Custom Registered Factory User Verification
         const localCustomUsers = JSON.parse(localStorage.getItem('factory_custom_users') || '[]');
         const matched = localCustomUsers.find((u: any) => u.email.toLowerCase() === cleanEmail);
 
         if (matched) {
-          if (password && matched.password && matched.password !== password) {
+          let passMatches = false;
+          if (password) {
+            const hashedInput = await sha256Hash(password);
+            passMatches = matched.password === password || matched.passwordHash === hashedInput;
+          }
+
+          if (!passMatches) {
+            const fail = recordFailedLoginAttempt(cleanEmail, 5, 15 * 60 * 1000);
+            logSecurityEvent({
+              id: crypto.randomUUID(),
+              type: 'LOGIN_FAILED',
+              details: `Invalid password for custom user ${cleanEmail}.`,
+              timestamp: new Date().toISOString(),
+            });
+            if (fail.locked) {
+              throw new Error('Security Lockout: Account locked for 15 minutes due to multiple failed attempts.');
+            }
             throw new Error('Invalid password.');
           }
+
+          resetRateLimit(cleanEmail);
 
           const matchedRole = DEFAULT_ROLES[matched.roleId] || DEFAULT_ROLES.STAFF;
           const customUser: User = {
@@ -90,13 +155,30 @@ export const useAuthStore = create<AuthState>((set, get) => {
             role: matchedRole,
           };
 
+          const signature = await generateSecuritySignature(customUser as unknown as Record<string, unknown>);
           localStorage.setItem('factory_user', JSON.stringify(customUser));
+          localStorage.setItem('factory_user_sig', signature);
           localStorage.setItem('factory_auth_token', `jwt_session_${matched.id}`);
-          set({ user: customUser, token: `jwt_session_${matched.id}`, isAuthenticated: true, isLoading: false });
+
+          logSecurityEvent({
+            id: crypto.randomUUID(),
+            type: 'LOGIN_SUCCESS',
+            details: `User ${cleanEmail} authenticated successfully as ${matchedRole.name}.`,
+            timestamp: new Date().toISOString(),
+          });
+
+          set({ user: customUser, token: `jwt_session_${matched.id}`, isAuthenticated: true, isLoading: false, currentRole: { role: matchedRole.name } });
           return;
         }
 
-        // If not found
+        // If user not found
+        recordFailedLoginAttempt(cleanEmail, 5, 15 * 60 * 1000);
+        logSecurityEvent({
+          id: crypto.randomUUID(),
+          type: 'LOGIN_FAILED',
+          details: `Attempt to login non-existent account: ${cleanEmail}`,
+          timestamp: new Date().toISOString(),
+        });
         throw new Error('Account not found. Please verify your registered email address.');
       } catch (err) {
         set({ isLoading: false });
@@ -155,8 +237,18 @@ export const useAuthStore = create<AuthState>((set, get) => {
         role: assignedRole,
       };
 
+      const signature = await generateSecuritySignature(userObj as unknown as Record<string, unknown>);
       localStorage.setItem('factory_user', JSON.stringify(userObj));
+      localStorage.setItem('factory_user_sig', signature);
       localStorage.setItem('factory_auth_token', `jwt_google_${sessionUser.id}`);
+
+      logSecurityEvent({
+        id: crypto.randomUUID(),
+        type: 'LOGIN_SUCCESS',
+        details: `Google OAuth login success for ${userObj.email}`,
+        timestamp: new Date().toISOString(),
+      });
+
       set({
         user: userObj,
         token: `jwt_google_${sessionUser.id}`,
@@ -174,6 +266,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       }
       localStorage.removeItem('factory_auth_token');
       localStorage.removeItem('factory_user');
+      localStorage.removeItem('factory_user_sig');
       set({ token: null, user: null, isAuthenticated: false });
     },
 

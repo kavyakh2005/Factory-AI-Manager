@@ -4,6 +4,7 @@ import { Customer, Product, Set, Order, OrderItem, OrderStatus, OrderPriority, O
 import { ProductService } from '../products/productService';
 import { CustomerService } from '../customers/customerService';
 import { FinishedGoodsService } from '../inventory/finishedGoodsService';
+import { sanitizeInput } from '../../utils/security';
 
 let localOrdersMemory: Order[] = LocalStorageManager.getSyncItems<Order>('orders', []);
 
@@ -226,7 +227,7 @@ export class OrderService {
 
     const newOrder: Order = {
       id: crypto.randomUUID(),
-      orderNumber: params.orderNumber,
+      orderNumber: sanitizeInput(params.orderNumber),
       customerId: params.customerId,
       customer,
       orderDate: params.orderDate,
@@ -238,13 +239,11 @@ export class OrderService {
       totalQuantity,
       subtotal: calculatedSubtotal,
       taxRate,
-      taxAmount,
+      taxAmount: Number(taxAmount.toFixed(2)),
       discountAmount,
-      grandTotal,
+      grandTotal: Number(grandTotal.toFixed(2)),
       paidAmount,
-      shortageQuantity: totalShortage,
-      reservedQuantity: totalReserved,
-      notes: params.notes,
+      notes: sanitizeInput(params.notes || ''),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       orderItems: generatedOrderItems,

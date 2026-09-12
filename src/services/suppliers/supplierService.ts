@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../supabase/client';
 import { LocalStorageManager } from '../storage/localDb';
 import { Supplier, CreateSupplierInput } from '../../types';
+import { sanitizeInput } from '../../utils/security';
 
 export const DEFAULT_FACTORY_SUPPLIERS: Supplier[] = [
   {
@@ -128,13 +129,13 @@ export class SupplierService {
 
     const newSup: Supplier = {
       id: `sup-${Date.now()}`,
-      supplierCode: code,
-      name: input.name.trim(),
-      contactPerson: input.contactPerson?.trim(),
-      phone: input.phone.trim(),
-      email: input.email?.trim(),
-      address: input.address?.trim(),
-      gstNumber: input.gstNumber?.trim().toUpperCase(),
+      supplierCode: sanitizeInput(code),
+      name: sanitizeInput(input.name),
+      contactPerson: input.contactPerson ? sanitizeInput(input.contactPerson) : undefined,
+      phone: sanitizeInput(input.phone),
+      email: input.email ? sanitizeInput(input.email) : undefined,
+      address: input.address ? sanitizeInput(input.address) : undefined,
+      gstNumber: input.gstNumber ? sanitizeInput(input.gstNumber).toUpperCase() : undefined,
       materialsSupplied: input.materialsSupplied || [],
       rating: input.rating || 5,
       status: input.status || 'ACTIVE',

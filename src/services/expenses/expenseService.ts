@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../supabase/client';
 import { LocalStorageManager } from '../storage/localDb';
 import { Expense, CreateExpenseInput } from '../../types';
+import { sanitizeInput } from '../../utils/security';
 
 let localExpensesMemory: Expense[] = LocalStorageManager.getSyncItems<Expense>('expenses', []);
 
@@ -82,12 +83,12 @@ export class ExpenseService {
     const newExp: Expense = {
       id: newId,
       expenseCategory: input.expenseCategory,
-      title: input.title.trim(),
+      title: sanitizeInput(input.title),
       amount: input.amount,
       expenseDate: input.expenseDate,
-      paidTo: input.paidTo?.trim(),
+      paidTo: input.paidTo ? sanitizeInput(input.paidTo) : undefined,
       receiptImage: input.receiptImage,
-      notes: input.notes?.trim(),
+      notes: input.notes ? sanitizeInput(input.notes) : undefined,
       createdAt: new Date().toISOString(),
     };
 
