@@ -9,6 +9,8 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password?: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  handleOAuthSession: (sessionUser: any) => Promise<User>;
   logout: () => Promise<void>;
   hasRole: (...roles: string[]) => boolean;
   hasPermission: (module: string, action?: 'canView' | 'canCreate' | 'canEdit' | 'canDelete' | 'canApprove' | 'canExport') => boolean;
@@ -100,6 +102,70 @@ export const useAuthStore = create<AuthState>((set, get) => {
         set({ isLoading: false });
         throw err;
       }
+    },
+
+    loginWithGoogle: async () => {
+      set({ isLoading: true });
+      try {
+        if (!isSupabaseConfigured) {
+          throw new Error('Supabase is not configured. Please check your environment variables.');
+        }
+
+        const redirectTo = `${window.location.origin}/login`;
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo,
+            queryParams: {
+              access_type: 'offline',
+              prompt: 'consent',
+            },
+          },
+        });
+
+        if (error) {
+          throw new Error(error.message || 'Google OAuth failed.');
+        }
+      } catch (err) {
+        set({ isLoading: false });
+        throw err;
+      }
+    },
+
+    handleOAuthSession: async (sessionUser: any) => {
+      const email = sessionUser.email?.toLowerCase() || '';
+      const name = sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || email.split('@')[0] || 'Factory User';
+      const isOwner = email === MASTER_OWNER_EMAIL.toLowerCase();
+
+      let assignedRole = isOwner ? DEFAULT_ROLES.OWNER : DEFAULT_ROLES.STAFF;
+      if (!isOwner) {
+        const localCustomUsers = JSON.parse(localStorage.getItem('factory_custom_users') || '[]');
+        const matched = localCustomUsers.find((u: any) => u.email.toLowerCase() === email);
+        if (matched && matched.roleId) {
+          assignedRole = DEFAULT_ROLES[matched.roleId] || DEFAULT_ROLES.STAFF;
+        }
+      }
+
+      const userObj: User = {
+        id: sessionUser.id || `u-google-${Date.now()}`,
+        email: sessionUser.email,
+        name: isOwner ? 'Kavya Khandelwal (Owner)' : name,
+        avatar: sessionUser.user_metadata?.avatar_url,
+        phone: sessionUser.phone || '+91 98200 11223',
+        role: assignedRole,
+      };
+
+      localStorage.setItem('factory_user', JSON.stringify(userObj));
+      localStorage.setItem('factory_auth_token', `jwt_google_${sessionUser.id}`);
+      set({
+        user: userObj,
+        token: `jwt_google_${sessionUser.id}`,
+        isAuthenticated: true,
+        isLoading: false,
+        currentRole: { role: assignedRole.name },
+      });
+
+      return userObj;
     },
 
     logout: async () => {

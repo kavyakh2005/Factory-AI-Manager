@@ -1,0 +1,57 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="50%" stop-color="#1e1b4b" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="50%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8" />
+      <stop offset="100%" stop-color="#34d399" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  <rect width="504" height="504" x="4" y="4" rx="108" fill="none" stroke="url(#primaryGrad)" stroke-width="6" stroke-opacity="0.5" />
+
+  <!-- Factory Industrial AI Icon Group -->
+  <g transform="translate(64, 64) scale(0.75)" filter="url(#glow)">
+    <!-- Factory Silhouette Roof & Walls -->
+    <path d="M40 380 L40 220 L140 280 L140 220 L240 280 L240 160 L372 160 L372 380 Z" 
+          fill="url(#primaryGrad)" fill-opacity="0.85" stroke="#ffffff" stroke-width="6" stroke-linejoin="round" />
+    
+    <!-- Factory Smoke Stacks / Industrial Pillars -->
+    <rect x="260" y="90" width="36" height="70" rx="6" fill="url(#primaryGrad)" stroke="#ffffff" stroke-width="4" />
+    <rect x="316" y="60" width="36" height="100" rx="6" fill="url(#primaryGrad)" stroke="#ffffff" stroke-width="4" />
+
+    <!-- AI Geometric Network Nodes & Garment Grid -->
+    <circle cx="140" cy="330" r="16" fill="#ffffff" />
+    <circle cx="240" cy="330" r="16" fill="#ffffff" />
+    <circle cx="340" cy="330" r="16" fill="#ffffff" />
+    <circle cx="240" cy="230" r="18" fill="#34d399" stroke="#ffffff" stroke-width="4" />
+    <circle cx="306" cy="190" r="14" fill="#60a5fa" stroke="#ffffff" stroke-width="3" />
+
+    <line x1="140" y1="330" x2="240" y2="230" stroke="#ffffff" stroke-width="6" stroke-linecap="round" />
+    <line x1="240" y1="330" x2="240" y2="230" stroke="#ffffff" stroke-width="6" stroke-linecap="round" />
+    <line x1="340" y1="330" x2="306" y2="190" stroke="#ffffff" stroke-width="6" stroke-linecap="round" />
+    <line x1="240" y1="230" x2="306" y2="190" stroke="#ffffff" stroke-width="6" stroke-linecap="round" />
+
+    <!-- AI Sparkle Core -->
+    <path d="M410 100 Q410 140 370 140 Q410 140 410 180 Q410 140 450 140 Q410 140 410 100 Z" fill="url(#glowGrad)" />
+    <path d="M100 130 Q100 150 80 150 Q100 150 100 170 Q100 150 120 150 Q100 150 100 130 Z" fill="#38bdf8" />
+  </g>
+
+  <!-- Typography Label Subtext -->
+  <text x="256" y="450" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-weight="900" font-size="34" fill="#ffffff" letter-spacing="4">FACTORY AI</text>
+</svg>

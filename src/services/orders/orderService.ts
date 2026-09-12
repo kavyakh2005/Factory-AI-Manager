@@ -130,6 +130,9 @@ export class OrderService {
     priority: OrderPriority;
     status: OrderStatus;
     notes?: string;
+    discountAmount?: number;
+    paidAmount?: number;
+    paymentStatus?: 'UNPAID' | 'PARTIAL' | 'PAID';
     items: OrderItemDraft[];
   }): Promise<Order> {
     const customers = await this.getCustomers();

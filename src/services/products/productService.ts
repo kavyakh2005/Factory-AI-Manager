@@ -460,17 +460,33 @@ export class ProductService {
 
       if (isSupabaseConfigured && navigator.onLine) {
         try {
+          // 1. Clean inventory items & their transactions
+          const { data: invItems } = await supabase.from('inventory_items').select('id').eq('product_id', id);
+          if (invItems && invItems.length > 0) {
+            const itemIds = invItems.map((i: any) => i.id);
+            await supabase.from('inventory_transactions').delete().in('item_id', itemIds);
+            await supabase.from('inventory_items').delete().eq('product_id', id);
+          }
+
+          // 2. Unlink / remove related references
           await supabase.from('product_sets').delete().eq('product_id', id);
-          await supabase.from('products').delete().eq('id', id);
+          await supabase.from('production_orders').update({ product_id: null }).eq('product_id', id);
+          await supabase.from('order_items').delete().eq('product_id', id);
+
+          // 3. Delete product
+          const { error } = await supabase.from('products').delete().eq('id', id);
+          if (error) throw error;
+
           await supabase.from('audit_logs').insert({
             action: 'DELETE_PRODUCT',
             entity: 'Product',
             entity_id: id,
             old_value: { name: deleted.name, code: deleted.code },
           });
-        } catch (err) {
+        } catch (err: any) {
           console.warn('Supabase product delete failed, queuing offline:', err);
           await LocalStorageManager.enqueueOfflineMutation('products', 'DELETE', { id });
+          throw new Error(`Failed to delete Product: ${err?.message || 'Database error'}`);
         }
       } else {
         await LocalStorageManager.enqueueOfflineMutation('products', 'DELETE', { id });
@@ -959,15 +975,33 @@ export class ProductService {
 
     if (isSupabaseConfigured && navigator.onLine) {
       try {
-        await supabase.from('set_sizes').delete().eq('set_id', id);
+        // 1. Clean inventory items & their transactions referencing this set
+        const { data: invItems } = await supabase.from('inventory_items').select('id').eq('set_id', id);
+        if (invItems && invItems.length > 0) {
+          const itemIds = invItems.map((i: any) => i.id);
+          await supabase.from('inventory_transactions').delete().in('item_id', itemIds);
+          await supabase.from('inventory_items').delete().eq('set_id', id);
+        }
+
+        // 2. Unlink / remove related set references
         await supabase.from('product_sets').delete().eq('set_id', id);
+        await supabase.from('set_sizes').delete().eq('set_id', id);
+        await supabase.from('production_orders').update({ set_id: null }).eq('set_id', id);
+        await supabase.from('order_items').delete().eq('set_id', id);
+
+        // 3. Delete the set record
         const { error } = await supabase.from('sets').delete().eq('id', id);
         if (error) throw error;
-        await supabase.from('audit_logs').insert({
-          action: 'DELETE_SET',
-          entity: 'Set',
-          entity_id: id,
-        });
+
+        try {
+          await supabase.from('audit_logs').insert({
+            action: 'DELETE_SET',
+            entity: 'Set',
+            entity_id: id,
+          });
+        } catch (auditErr) {
+          console.warn('Audit log write error:', auditErr);
+        }
       } catch (err: any) {
         console.error('Supabase deleteSet error:', err);
         throw new Error(`Failed to delete Set: ${err?.message || 'Unknown error'}`);
@@ -985,14 +1019,31 @@ export class ProductService {
 
     if (isSupabaseConfigured && navigator.onLine) {
       try {
+        // 1. Clean inventory items & their transactions referencing this size
+        const { data: invItems } = await supabase.from('inventory_items').select('id').eq('size_id', id);
+        if (invItems && invItems.length > 0) {
+          const itemIds = invItems.map((i: any) => i.id);
+          await supabase.from('inventory_transactions').delete().in('item_id', itemIds);
+          await supabase.from('inventory_items').delete().eq('size_id', id);
+        }
+
+        // 2. Unlink / remove size from sets and orders
         await supabase.from('set_sizes').delete().eq('size_id', id);
+        await supabase.from('order_items').delete().eq('size_id', id);
+
+        // 3. Delete the size record
         const { error } = await supabase.from('sizes').delete().eq('id', id);
         if (error) throw error;
-        await supabase.from('audit_logs').insert({
-          action: 'DELETE_SIZE',
-          entity: 'Size',
-          entity_id: id,
-        });
+
+        try {
+          await supabase.from('audit_logs').insert({
+            action: 'DELETE_SIZE',
+            entity: 'Size',
+            entity_id: id,
+          });
+        } catch (auditErr) {
+          console.warn('Audit log write error:', auditErr);
+        }
       } catch (err: any) {
         console.error('Supabase deleteSize error:', err);
         throw new Error(`Failed to delete Size: ${err?.message || 'Unknown error'}`);

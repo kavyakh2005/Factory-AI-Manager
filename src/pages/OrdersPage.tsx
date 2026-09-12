@@ -7,6 +7,9 @@ import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
 import { CreateOrderModal } from '../components/orders/CreateOrderModal';
 import { OrderDetailsModal } from '../components/orders/OrderDetailsModal';
+import { DispatchOrderModal } from '../components/orders/DispatchOrderModal';
+import { RecordPaymentModal } from '../components/orders/RecordPaymentModal';
+import { OrderPrintInvoiceModal } from '../components/orders/OrderPrintInvoiceModal';
 import {
   ShoppingCart,
   Plus,
@@ -18,28 +21,45 @@ import {
   Clock,
   IndianRupee,
   Layers,
-  Sparkles,
   Trash2,
+  Truck,
+  CreditCard,
+  Printer,
+  TrendingUp,
+  AlertCircle,
+  PackageCheck,
 } from 'lucide-react';
 
 export const OrdersPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [paymentFilter, setPaymentFilter] = useState('ALL');
+
+  // Modal States
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [dispatchingOrder, setDispatchingOrder] = useState<Order | null>(null);
+  const [payingOrder, setPayingOrder] = useState<Order | null>(null);
+  const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
 
   const queryClient = useQueryClient();
 
   // Load Orders
   const {
-    data: orders = [],
+    data: rawOrders = [],
     isLoading: isLoadingOrders,
     isFetching,
     refetch: refetchOrders,
   } = useQuery({
     queryKey: ['orders', statusFilter, searchQuery],
     queryFn: () => OrderService.getOrders({ status: statusFilter, search: searchQuery }),
+  });
+
+  // Filter orders by payment if selected
+  const orders = rawOrders.filter((o) => {
+    if (paymentFilter === 'ALL') return true;
+    return o.paymentStatus === paymentFilter;
   });
 
   // Load Customers
@@ -60,11 +80,17 @@ export const OrdersPage: React.FC = () => {
     queryFn: () => OrderService.getSetsWithSizes(),
   });
 
-  // Confirm Order Mutation
-  const confirmOrderMutation = useMutation({
-    mutationFn: (orderId: string) => OrderService.updateOrderStatus(orderId, 'CONFIRMED'),
+  // Status Change Mutation
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) =>
+      OrderService.updateOrderStatus(orderId, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['ready-stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-reservations'] });
+    },
+    onError: (err: any) => {
+      alert(`Status update failed: ${err?.message || 'Error updating status'}`);
     },
   });
 
@@ -82,16 +108,25 @@ export const OrdersPage: React.FC = () => {
   });
 
   const handleDeleteOrder = (orderId: string, orderNumber: string) => {
-    if (window.confirm(`Are you sure you want to delete order "${orderNumber}"? This will also remove any attached dispatch records and release reserved stock.`)) {
+    if (
+      window.confirm(
+        `Are you sure you want to delete order "${orderNumber}"? This will also remove any attached dispatch records and release reserved stock.`
+      )
+    ) {
       deleteOrderMutation.mutate(orderId);
     }
   };
 
   // Overall calculations
-  const totalOrdersCount = orders.length;
-  const pendingOrdersCount = orders.filter((o) => ['CONFIRMED', 'IN_PRODUCTION', 'READY_FOR_DISPATCH'].includes(o.status)).length;
-  const totalPcsBooked = orders.reduce((sum, o) => sum + (o.totalQuantity || 0), 0);
-  const totalValuation = orders.reduce((sum, o) => sum + (o.grandTotal || 0), 0);
+  const totalOrdersCount = rawOrders.length;
+  const pendingOrdersCount = rawOrders.filter((o) =>
+    ['CONFIRMED', 'IN_PRODUCTION', 'READY_FOR_DISPATCH'].includes(o.status)
+  ).length;
+  const readyToShipCount = rawOrders.filter((o) => o.status === 'READY_FOR_DISPATCH').length;
+  const totalPcsBooked = rawOrders.reduce((sum, o) => sum + (o.totalQuantity || 0), 0);
+  const totalValuation = rawOrders.reduce((sum, o) => sum + (o.grandTotal || 0), 0);
+  const totalPaid = rawOrders.reduce((sum, o) => sum + (Number(o.paidAmount) || 0), 0);
+  const totalReceivable = Math.max(0, totalValuation - totalPaid);
 
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
@@ -115,14 +150,51 @@ export const OrdersPage: React.FC = () => {
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case 'URGENT':
-        return <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-black">URGENT</span>;
+        return (
+          <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-black">
+            URGENT
+          </span>
+        );
       case 'HIGH':
-        return <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold">HIGH</span>;
+        return (
+          <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold">
+            HIGH
+          </span>
+        );
       case 'LOW':
         return <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">LOW</span>;
       default:
-        return <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-semibold">NORMAL</span>;
+        return (
+          <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-semibold">
+            NORMAL
+          </span>
+        );
     }
+  };
+
+  const getPaymentBadge = (status?: string, paid?: number, total?: number) => {
+    const isPaid = status === 'PAID' || (paid && total && paid >= total);
+    const isPartial = status === 'PARTIAL' || (paid && paid > 0);
+
+    if (isPaid) {
+      return (
+        <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+          PAID ✓
+        </span>
+      );
+    }
+    if (isPartial) {
+      return (
+        <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-bold">
+          PARTIAL (₹{(paid || 0).toLocaleString()})
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-semibold">
+        UNPAID
+      </span>
+    );
   };
 
   return (
@@ -131,13 +203,13 @@ export const OrdersPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-100 tracking-tight flex items-center gap-2.5">
-            Garment Orders & Size Matrix
+            Garment Orders & Wholesale Matrix
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/30">
               Supabase Connected
             </span>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Capture and track wholesale orders with multi-product, multi-set, and dynamic size matrices.
+            Capture wholesale orders on Ready Stock, manage size-wise allocations, dispatch shipments, and track payments.
           </p>
         </div>
 
@@ -156,6 +228,7 @@ export const OrdersPage: React.FC = () => {
             size="sm"
             onClick={() => setIsCreateModalOpen(true)}
             icon={<Plus className="w-4 h-4" />}
+            className="bg-primary-600 hover:bg-primary-500 text-white font-bold"
           >
             Create Garment Order
           </Button>
@@ -171,80 +244,102 @@ export const OrdersPage: React.FC = () => {
               <ShoppingCart className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-black text-slate-100">{totalOrdersCount} <span className="text-xs font-normal text-slate-400">orders</span></div>
-          <div className="text-[11px] text-slate-400 mt-1">Wholesale accounts</div>
+          <div className="mt-2 text-2xl font-black text-slate-100">
+            {totalOrdersCount} <span className="text-xs font-normal text-slate-400">orders</span>
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1">{totalPcsBooked.toLocaleString()} pcs total</div>
         </Card>
 
         <Card className="p-4 border-slate-800">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Pending Orders</span>
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Floor Pipeline</span>
             <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400">
               <Clock className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-black text-slate-100">{pendingOrdersCount} <span className="text-xs font-normal text-slate-400">active</span></div>
-          <div className="text-[11px] text-amber-400 font-medium mt-1">Awaiting floor execution</div>
-        </Card>
-
-        <Card className="p-4 border-slate-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Volume</span>
-            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
-              <Layers className="w-4 h-4" />
-            </div>
+          <div className="mt-2 text-2xl font-black text-slate-100">
+            {pendingOrdersCount} <span className="text-xs font-normal text-slate-400">active</span>
           </div>
-          <div className="mt-2 text-2xl font-black text-slate-100">{totalPcsBooked.toLocaleString()} <span className="text-xs font-normal text-slate-400">pcs</span></div>
-          <div className="text-[11px] text-slate-400 mt-1">Size matrix aggregated</div>
+          <div className="text-[11px] text-amber-400 font-medium mt-1">
+            {readyToShipCount} orders ready for dispatch
+          </div>
         </Card>
 
         <Card className="p-4 border-slate-800">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Order Value</span>
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Order Valuation</span>
             <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
               <IndianRupee className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2 text-2xl font-black text-emerald-400">₹{totalValuation.toLocaleString()}</div>
-          <div className="text-[11px] text-slate-400 mt-1">Inclusive of GST</div>
+          <div className="text-[11px] text-slate-400 mt-1">Received: ₹{totalPaid.toLocaleString()}</div>
+        </Card>
+
+        <Card className="p-4 border-slate-800">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Receivable Balance</span>
+            <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-black text-rose-400">₹{totalReceivable.toLocaleString()}</div>
+          <div className="text-[11px] text-rose-400/80 font-medium mt-1">Pending collection</div>
         </Card>
       </div>
 
       {/* Filter & Search Controls */}
       <Card className="p-4 border-slate-800 space-y-3">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
           {/* Search Bar */}
-          <div className="relative w-full sm:w-80">
+          <div className="relative w-full lg:w-80">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search by Order #, Customer, City..."
+              placeholder="Search by Order #, Customer, City, Phone..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3.5 py-1.5 rounded-lg bg-factory-950 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-primary-500"
             />
           </div>
 
-          {/* Status Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-            {[
-              { id: 'ALL', label: 'All Orders' },
-              { id: 'CONFIRMED', label: 'Confirmed' },
-              { id: 'DRAFT', label: 'Draft' },
-              { id: 'IN_PRODUCTION', label: 'In Production' },
-              { id: 'COMPLETED', label: 'Completed' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setStatusFilter(tab.id)}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
-                  statusFilter === tab.id
-                    ? 'bg-primary-600 text-white shadow-sm'
-                    : 'bg-factory-950 text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+            {/* Payment Filter */}
+            <select
+              value={paymentFilter}
+              onChange={(e) => setPaymentFilter(e.target.value)}
+              className="px-3 py-1.5 rounded-lg bg-factory-950 border border-slate-700 text-slate-300 text-xs focus:border-primary-500 outline-none font-medium"
+            >
+              <option value="ALL">All Payment Statuses</option>
+              <option value="PAID">Fully Paid</option>
+              <option value="PARTIAL">Partially Paid</option>
+              <option value="UNPAID">Unpaid Only</option>
+            </select>
+
+            {/* Status Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+              {[
+                { id: 'ALL', label: 'All Orders' },
+                { id: 'CONFIRMED', label: 'Confirmed' },
+                { id: 'IN_PRODUCTION', label: 'In Production' },
+                { id: 'READY_FOR_DISPATCH', label: 'Ready to Ship' },
+                { id: 'COMPLETED', label: 'Completed' },
+                { id: 'DRAFT', label: 'Drafts' },
+                { id: 'CANCELLED', label: 'Cancelled' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setStatusFilter(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
+                    statusFilter === tab.id
+                      ? 'bg-primary-600 text-white shadow-sm'
+                      : 'bg-factory-950 text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </Card>
@@ -264,7 +359,7 @@ export const OrdersPage: React.FC = () => {
             <div>
               <h3 className="text-sm font-bold text-slate-200">No Orders Found</h3>
               <p className="text-xs text-slate-400 mt-1">
-                {searchQuery || statusFilter !== 'ALL'
+                {searchQuery || statusFilter !== 'ALL' || paymentFilter !== 'ALL'
                   ? 'No orders match your filter criteria.'
                   : 'Start by clicking "Create Garment Order" above.'}
               </p>
@@ -284,13 +379,17 @@ export const OrdersPage: React.FC = () => {
                   <th className="p-3.5 text-center">Volume (Pcs)</th>
                   <th className="p-3.5">Target Delivery</th>
                   <th className="p-3.5">Status</th>
+                  <th className="p-3.5">Payment</th>
                   <th className="p-3.5 text-right">Grand Total</th>
                   <th className="p-3.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {orders.map((order) => {
-                  const isOverdue = new Date(order.deliveryDate) < new Date() && order.status !== 'COMPLETED';
+                  const isOverdue =
+                    new Date(order.deliveryDate) < new Date() &&
+                    order.status !== 'COMPLETED' &&
+                    order.status !== 'CANCELLED';
 
                   return (
                     <tr
@@ -351,7 +450,9 @@ export const OrdersPage: React.FC = () => {
                       {/* Delivery Date */}
                       <td className="p-3.5">
                         <div className="flex items-center gap-1.5">
-                          <Calendar className={`w-3.5 h-3.5 ${isOverdue ? 'text-rose-400' : 'text-slate-400'}`} />
+                          <Calendar
+                            className={`w-3.5 h-3.5 ${isOverdue ? 'text-rose-400' : 'text-slate-400'}`}
+                          />
                           <span className={`font-semibold ${isOverdue ? 'text-rose-400' : 'text-slate-300'}`}>
                             {new Date(order.deliveryDate).toLocaleDateString()}
                           </span>
@@ -362,7 +463,19 @@ export const OrdersPage: React.FC = () => {
                       </td>
 
                       {/* Status */}
-                      <td className="p-3.5">{getStatusBadge(order.status)}</td>
+                      <td className="p-3.5">
+                        <div className="space-y-1">
+                          {getStatusBadge(order.status)}
+                          {order.fulfillmentStatus === 'SHORTAGE' && (
+                            <div className="text-[9px] text-rose-400 font-bold">Shortage</div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Payment Badge */}
+                      <td className="p-3.5">
+                        {getPaymentBadge(order.paymentStatus, order.paidAmount, order.grandTotal)}
+                      </td>
 
                       {/* Grand Total */}
                       <td className="p-3.5 text-right font-black text-slate-100">
@@ -370,10 +483,7 @@ export const OrdersPage: React.FC = () => {
                       </td>
 
                       {/* Actions */}
-                      <td
-                        className="p-3.5 text-right"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                      <td className="p-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
                           <Button
                             variant="ghost"
@@ -383,16 +493,54 @@ export const OrdersPage: React.FC = () => {
                               setIsDetailsModalOpen(true);
                             }}
                             className="p-1.5"
-                            title="View Details"
+                            title="View / Process Order"
                           >
                             <Eye className="w-4 h-4 text-slate-400 hover:text-slate-100" />
                           </Button>
 
+                          {/* Quick Dispatch Action */}
+                          {['CONFIRMED', 'IN_PRODUCTION', 'READY_FOR_DISPATCH'].includes(order.status) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDispatchingOrder(order)}
+                              className="p-1.5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                              title="Dispatch / Ship Order"
+                            >
+                              <Truck className="w-4 h-4" />
+                            </Button>
+                          )}
+
+                          {/* Quick Payment Action */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setPayingOrder(order)}
+                            className="p-1.5 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10"
+                            title="Record Payment"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                          </Button>
+
+                          {/* Quick Print Invoice Action */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setPrintingOrder(order)}
+                            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                            title="Print Tax Invoice / Challan"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </Button>
+
+                          {/* Quick Confirm if Draft */}
                           {order.status === 'DRAFT' && (
                             <Button
                               variant="accent"
                               size="sm"
-                              onClick={() => confirmOrderMutation.mutate(order.id)}
+                              onClick={() =>
+                                updateStatusMutation.mutate({ orderId: order.id, status: 'CONFIRMED' })
+                              }
                               className="px-2 py-1 text-[11px]"
                               icon={<CheckCircle2 className="w-3.5 h-3.5" />}
                             >
@@ -400,11 +548,14 @@ export const OrdersPage: React.FC = () => {
                             </Button>
                           )}
 
+                          {/* Delete Order */}
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDeleteOrder(order.id, order.orderNumber)}
-                            isLoading={deleteOrderMutation.isPending && deleteOrderMutation.variables === order.id}
+                            isLoading={
+                              deleteOrderMutation.isPending && deleteOrderMutation.variables === order.id
+                            }
                             className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"
                             title="Delete Order"
                           >
@@ -428,14 +579,47 @@ export const OrdersPage: React.FC = () => {
         customers={customers}
         products={products}
         sets={sets}
-        onOrderCreated={() => queryClient.invalidateQueries({ queryKey: ['orders'] })}
+        onOrderCreated={() => {
+          queryClient.invalidateQueries({ queryKey: ['orders'] });
+          queryClient.invalidateQueries({ queryKey: ['ready-stock-items'] });
+        }}
       />
 
       <OrderDetailsModal
         order={selectedOrder}
         isOpen={isDetailsModalOpen}
         onClose={() => setIsDetailsModalOpen(false)}
-        onConfirmOrder={(id) => confirmOrderMutation.mutate(id)}
+        onConfirmOrder={(id) => updateStatusMutation.mutate({ orderId: id, status: 'CONFIRMED' })}
+        onUpdateStatus={(id, status) => updateStatusMutation.mutate({ orderId: id, status })}
+        onOpenDispatch={(ord) => setDispatchingOrder(ord)}
+        onOpenPayment={(ord) => setPayingOrder(ord)}
+        onOpenPrint={(ord) => setPrintingOrder(ord)}
+      />
+
+      <DispatchOrderModal
+        order={dispatchingOrder}
+        isOpen={!!dispatchingOrder}
+        onClose={() => setDispatchingOrder(null)}
+        onDispatchSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['orders'] });
+          queryClient.invalidateQueries({ queryKey: ['dispatches'] });
+          queryClient.invalidateQueries({ queryKey: ['ready-stock-items'] });
+        }}
+      />
+
+      <RecordPaymentModal
+        order={payingOrder}
+        isOpen={!!payingOrder}
+        onClose={() => setPayingOrder(null)}
+        onPaymentSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['orders'] });
+        }}
+      />
+
+      <OrderPrintInvoiceModal
+        order={printingOrder}
+        isOpen={!!printingOrder}
+        onClose={() => setPrintingOrder(null)}
       />
     </div>
   );
