@@ -588,6 +588,33 @@ export class ProductionService {
           }).eq('id', params.productionOrderId);
         }
 
+        // If logged on PACKING or READY stage, immediately credit passed pieces to Finished Goods Ready Stock
+        const stages = await this.getStages();
+        const stageObj = stages.find((s) => s.id === params.stageId || s.name === params.stageId);
+        if (prodOrder && stageObj && (stageObj.name === 'READY' || stageObj.name === 'PACKING')) {
+          const sets = await OrderService.getSetsWithSizes();
+          const setObj = sets.find((s) => s.id === prodOrder.setId);
+          const sizeEntries = params.entries.map((e) => {
+            const sizeObj = setObj?.setSizes?.find((ss) => ss.sizeId === e.sizeId)?.size;
+            return {
+              sizeId: e.sizeId,
+              sizeName: sizeObj?.name,
+              quantityPassed: e.quantityPassed,
+              quantityRejected: e.quantityRejected,
+            };
+          });
+
+          await FinishedGoodsService.creditProductionToReadyStock({
+            productionOrderId: prodOrder.id,
+            productionNumber: prodOrder.productionNumber,
+            productId: prodOrder.productId,
+            setId: prodOrder.setId,
+            entries: sizeEntries,
+            operatorName: params.operatorName,
+            notes: params.notes,
+          });
+        }
+
         // Audit Log
         await supabase.from('audit_logs').insert({
           action: 'LOG_PRODUCTION_ENTRY',
@@ -611,6 +638,33 @@ export class ProductionService {
         productionOrderId: params.productionOrderId,
         entries: newEntryObjects,
       });
+
+      // Also credit locally for offline / localhost mode
+      const stages = await this.getStages();
+      const stageObj = stages.find((s) => s.id === params.stageId || s.name === params.stageId);
+      if (prodOrder && stageObj && (stageObj.name === 'READY' || stageObj.name === 'PACKING')) {
+        const sets = await OrderService.getSetsWithSizes();
+        const setObj = sets.find((s) => s.id === prodOrder.setId);
+        const sizeEntries = params.entries.map((e) => {
+          const sizeObj = setObj?.setSizes?.find((ss) => ss.sizeId === e.sizeId)?.size;
+          return {
+            sizeId: e.sizeId,
+            sizeName: sizeObj?.name,
+            quantityPassed: e.quantityPassed,
+            quantityRejected: e.quantityRejected,
+          };
+        });
+
+        await FinishedGoodsService.creditProductionToReadyStock({
+          productionOrderId: prodOrder.id,
+          productionNumber: prodOrder.productionNumber,
+          productId: prodOrder.productId,
+          setId: prodOrder.setId,
+          entries: sizeEntries,
+          operatorName: params.operatorName,
+          notes: params.notes,
+        });
+      }
     }
   }
 
@@ -636,32 +690,45 @@ export class ProductionService {
         prodOrder.status = 'COMPLETED';
         prodOrder.actualCompletionDate = new Date().toISOString();
 
-        // 1. Transfer QC-passed packed pieces to Finished Goods Stock
+        // 1. Transfer QC-passed packed pieces to Finished Goods Ready Stock
         const sets = await OrderService.getSetsWithSizes();
         const setObj = sets.find((s) => s.id === prodOrder.setId);
         if (setObj) {
           const breakdown = this.calculateSizeWiseBreakdown(prodOrder, setObj);
           let packingEntries = breakdown
             .filter((sb) => sb.goodQuantity > 0)
-            .map((sb) => ({ sizeId: sb.sizeId, quantity: sb.goodQuantity }));
+            .map((sb) => ({
+              sizeId: sb.sizeId,
+              sizeName: sb.sizeName,
+              quantityPassed: sb.goodQuantity,
+              quantityRejected: sb.rejectedQuantity,
+            }));
 
           // Fallback to planned size quantities if no step entries were logged
           if (packingEntries.length === 0 && prodOrder.plannedSizes) {
             packingEntries = Object.entries(prodOrder.plannedSizes)
               .filter(([_, qty]) => (Number(qty) || 0) > 0)
-              .map(([sizeId, qty]) => ({ sizeId, quantity: Number(qty) }));
+              .map(([sizeId, qty]) => {
+                const sizeObj = setObj.setSizes?.find((ss) => ss.sizeId === sizeId)?.size;
+                return {
+                  sizeId,
+                  sizeName: sizeObj?.name || sizeId,
+                  quantityPassed: Number(qty),
+                  quantityRejected: 0,
+                };
+              });
           }
 
           if (packingEntries.length > 0) {
-            await FinishedGoodsService.recordPackingOutput(
-              prodOrder.id,
-              prodOrder.productionNumber,
-              prodOrder.productId,
-              prodOrder.setId,
-              packingEntries,
-              undefined,
-              prodOrder.assignedTeam || 'Packing Supervisor'
-            );
+            await FinishedGoodsService.creditProductionToReadyStock({
+              productionOrderId: prodOrder.id,
+              productionNumber: prodOrder.productionNumber,
+              productId: prodOrder.productId,
+              setId: prodOrder.setId,
+              entries: packingEntries,
+              operatorName: prodOrder.assignedTeam || 'Packing Supervisor',
+              notes: notes || 'Batch stage advanced to READY',
+            });
           }
         }
 

@@ -1,5 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../supabase/client';
 import { LocalStorageManager } from '../storage/localDb';
+import { FinishedGoodsService } from '../inventory/finishedGoodsService';
+import { ProductionService } from '../production/productionService';
 import {
   Product,
   Set as GarmentSet,
@@ -9,6 +11,59 @@ import {
   CreateSetInput,
   CreateSizeInput,
 } from '../../types';
+
+export interface ProductReadyStockSize {
+  sizeId: string;
+  sizeName: string;
+  physicalQuantity: number;
+  reservedQuantity: number;
+  dispatchableQuantity: number;
+}
+
+export interface ProductReadyStockSet {
+  setId: string;
+  setName: string;
+  setCode: string;
+  totalPhysical: number;
+  totalReserved: number;
+  totalDispatchable: number;
+  sizes: ProductReadyStockSize[];
+}
+
+export interface ProductWithReadyStock extends Product {
+  totalReadyStock: number;
+  totalReservedStock: number;
+  totalDispatchableStock: number;
+  stockStatus: 'AVAILABLE' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+  setWiseStock: ProductReadyStockSet[];
+}
+
+export interface ProductDetailFullStock {
+  product: ProductWithReadyStock;
+  productionBatches: Array<{
+    id: string;
+    productionNumber: string;
+    stageName: string;
+    status: string;
+    totalPlannedQty: number;
+    totalCompletedQty: number;
+    totalRejectedQty: number;
+    completionDate?: string;
+    startDate?: string;
+    assignedTeam?: string;
+  }>;
+  stockMovements: Array<{
+    id: string;
+    transactionType: string;
+    quantityChange: number;
+    balanceAfter: number;
+    referenceType: string;
+    referenceId?: string;
+    notes?: string;
+    performerName?: string;
+    createdAt: string;
+  }>;
+}
 
 export const DEFAULT_FACTORY_SIZES: Size[] = [
   { id: 'sz-24', name: '24', code: 'SZ-24', sortOrder: 1, status: 'ACTIVE' },
@@ -1053,5 +1108,149 @@ export class ProductService {
     }
 
     await LocalStorageManager.cacheItems('sizes', localSizesMemory);
+  }
+
+  // ==========================================
+  // READY STOCK & PRODUCT MASTER VIEW METHODS
+  // ==========================================
+
+  /**
+   * Fetch all products with real-time Ready Stock (Physical, Reserved, Dispatchable) size breakdowns
+   */
+  static async getProductsWithReadyStock(filters?: {
+    category?: string;
+    status?: string;
+    search?: string;
+  }): Promise<ProductWithReadyStock[]> {
+    const [products, stockList] = await Promise.all([
+      this.getProducts(filters),
+      FinishedGoodsService.getFinishedGoodsStock(),
+    ]);
+
+    return products.map((prod) => {
+      const prodStock = stockList.filter((s) => s.productId === prod.id);
+
+      let totalPhysical = 0;
+      let totalReserved = 0;
+      let totalDispatchable = 0;
+
+      const setMap = new Map<string, ProductReadyStockSet>();
+
+      // Ensure all assigned sets are mapped
+      (prod.productSets || []).forEach((ps) => {
+        if (ps.set) {
+          const s = ps.set;
+          setMap.set(s.id, {
+            setId: s.id,
+            setName: s.name,
+            setCode: s.code,
+            totalPhysical: 0,
+            totalReserved: 0,
+            totalDispatchable: 0,
+            sizes: (s.setSizes || []).map((ss) => ({
+              sizeId: ss.sizeId,
+              sizeName: ss.size?.name || ss.sizeId,
+              physicalQuantity: 0,
+              reservedQuantity: 0,
+              dispatchableQuantity: 0,
+            })),
+          });
+        }
+      });
+
+      // Populate with real stock
+      prodStock.forEach((stk) => {
+        totalPhysical += stk.physicalQuantity;
+        totalReserved += stk.reservedQuantity;
+        totalDispatchable += stk.dispatchableQuantity;
+
+        if (stk.setId) {
+          let setEntry = setMap.get(stk.setId);
+          if (!setEntry) {
+            setEntry = {
+              setId: stk.setId,
+              setName: stk.setName || 'Standard Set',
+              setCode: stk.set?.code || 'SET',
+              totalPhysical: 0,
+              totalReserved: 0,
+              totalDispatchable: 0,
+              sizes: [],
+            };
+            setMap.set(stk.setId, setEntry);
+          }
+
+          setEntry.totalPhysical += stk.physicalQuantity;
+          setEntry.totalReserved += stk.reservedQuantity;
+          setEntry.totalDispatchable += stk.dispatchableQuantity;
+
+          let sizeEntry = setEntry.sizes.find((sz) => sz.sizeId === stk.sizeId);
+          if (!sizeEntry) {
+            sizeEntry = {
+              sizeId: stk.sizeId,
+              sizeName: stk.sizeName || stk.sizeId,
+              physicalQuantity: stk.physicalQuantity,
+              reservedQuantity: stk.reservedQuantity,
+              dispatchableQuantity: stk.dispatchableQuantity,
+            };
+            setEntry.sizes.push(sizeEntry);
+          } else {
+            sizeEntry.physicalQuantity = stk.physicalQuantity;
+            sizeEntry.reservedQuantity = stk.reservedQuantity;
+            sizeEntry.dispatchableQuantity = stk.dispatchableQuantity;
+          }
+        }
+      });
+
+      let stockStatus: 'AVAILABLE' | 'LOW_STOCK' | 'OUT_OF_STOCK' = 'OUT_OF_STOCK';
+      if (totalDispatchable > 20) {
+        stockStatus = 'AVAILABLE';
+      } else if (totalDispatchable > 0) {
+        stockStatus = 'LOW_STOCK';
+      }
+
+      return {
+        ...prod,
+        totalReadyStock: totalPhysical,
+        totalReservedStock: totalReserved,
+        totalDispatchableStock: totalDispatchable,
+        stockStatus,
+        setWiseStock: Array.from(setMap.values()),
+      };
+    });
+  }
+
+  /**
+   * Fetch complete product details with set-wise stock, production history, and recent stock movements
+   */
+  static async getProductDetailsWithStock(productId: string): Promise<ProductDetailFullStock | null> {
+    const productsWithStock = await this.getProductsWithReadyStock();
+    const product = productsWithStock.find((p) => p.id === productId);
+    if (!product) return null;
+
+    const [allBatches, movements] = await Promise.all([
+      ProductionService.getProductionOrders({ status: 'ALL' }),
+      FinishedGoodsService.getProductStockMovements(productId),
+    ]);
+
+    const prodBatches = allBatches
+      .filter((b) => b.productId === productId)
+      .map((b) => ({
+        id: b.id,
+        productionNumber: b.productionNumber,
+        stageName: b.currentStage?.name || 'PLANNING',
+        status: b.status,
+        totalPlannedQty: b.totalPlannedQty,
+        totalCompletedQty: b.totalCompletedQty || 0,
+        totalRejectedQty: b.totalRejectedQty || 0,
+        completionDate: b.actualCompletionDate || b.targetCompletionDate,
+        startDate: b.startDate,
+        assignedTeam: b.assignedTeam,
+      }));
+
+    return {
+      product,
+      productionBatches: prodBatches,
+      stockMovements: movements,
+    };
   }
 }

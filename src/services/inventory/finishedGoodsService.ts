@@ -20,7 +20,24 @@ let localReservations: StockReservation[] = LocalStorageManager.getSyncItems<Sto
 let localRequirements: ProductionRequirement[] = LocalStorageManager.getSyncItems<ProductionRequirement>('production_requirements', []);
 let localCartons: Carton[] = LocalStorageManager.getSyncItems<Carton>('cartons', []);
 let localReturns: StockReturn[] = LocalStorageManager.getSyncItems<StockReturn>('stock_returns', []);
-const processedPackingBatches = new Set<string>();
+let localInventoryTransactions: InventoryTransaction[] = LocalStorageManager.getSyncItems<InventoryTransaction>('inventory_transactions', []);
+
+// Track cumulative credited quantities per batch + size: { [batchId_sizeId]: totalCreditedPieces }
+const getCreditedMap = (): Record<string, number> => {
+  try {
+    const raw = localStorage.getItem('factory_production_credited_map');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveCreditedMap = (map: Record<string, number>) => {
+  try {
+    localStorage.setItem('factory_production_credited_map', JSON.stringify(map));
+  } catch {}
+};
+
 const processedDispatchOrders = new Set<string>();
 
 const isUuid = (str?: string) =>
@@ -274,7 +291,7 @@ export class FinishedGoodsService {
         if (stockItem) {
           await this.logInventoryLedgerEntry({
             itemId: stockItem.id,
-            transactionType: 'IN', // Recorded as reservation lock
+            transactionType: 'IN',
             quantityChange: 0,
             balanceAfter: stockItem.physicalQuantity,
             referenceType: 'STOCK_RESERVE',
@@ -406,79 +423,97 @@ export class FinishedGoodsService {
   }
 
   /**
-   * 6. RECORD PACKING OUTPUT (TRANSFERS QC-PASSED PIECES TO READY STOCK)
-   * Idempotent: packing a batch once moves goods into Finished Goods warehouse.
+   * 6. CREDIT PRODUCTION TO READY STOCK (IDEMPOTENT & SIZE-WISE)
+   * Transfers QC-passed pieces to Ready Stock without creating new Product Master records.
+   * Supports partial production and rejects duplicate credit attempts.
    */
-  static async recordPackingOutput(
-    batchId: string,
-    batchNumber: string,
-    productId: string,
-    setId: string,
-    entries: Array<{ sizeId: string; quantity: number }>,
-    cartonNumber?: string,
-    operatorName?: string
-  ): Promise<{ addedPcs: number }> {
-    const packingKey = `${batchId}-${cartonNumber || 'DEFAULT'}`;
-    if (processedPackingBatches.has(packingKey)) {
-      console.warn(`Packing output for ${packingKey} already recorded. Skipping duplicate.`);
-      return { addedPcs: 0 };
-    }
-
-    let addedPcs = 0;
+  static async creditProductionToReadyStock(params: {
+    productionOrderId: string;
+    productionNumber: string;
+    productId: string;
+    setId: string;
+    entries: Array<{
+      sizeId: string;
+      sizeName?: string;
+      quantityPassed: number;
+      quantityRejected?: number;
+    }>;
+    cartonNumber?: string;
+    operatorName?: string;
+    notes?: string;
+  }): Promise<{ creditedPcs: number; sizeBreakdown: Record<string, number> }> {
+    const creditedMap = getCreditedMap();
+    let totalCredited = 0;
+    const sizeBreakdown: Record<string, number> = {};
     const now = new Date().toISOString();
 
-    for (const entry of entries) {
-      if (entry.quantity <= 0) continue;
+    for (const entry of params.entries) {
+      const passedQty = Math.max(0, Number(entry.quantityPassed) || 0);
+      if (passedQty <= 0) continue;
 
+      const creditKey = `${params.productionOrderId}_${entry.sizeId}`;
+      const previouslyCredited = creditedMap[creditKey] || 0;
+
+      // Delta to add for partial completion / incremental ready batches
+      const deltaToAdd = Math.max(0, passedQty - previouslyCredited);
+      if (deltaToAdd <= 0) {
+        // Already credited this quantity, skip to guarantee idempotency
+        continue;
+      }
+
+      // Find or create FinishedGoodsStock item
       let stockItem = localFinishedStock.find(
-        (s) => s.productId === productId && s.setId === setId && s.sizeId === entry.sizeId
+        (s) => s.productId === params.productId && s.setId === params.setId && s.sizeId === entry.sizeId
       );
 
       if (!stockItem) {
-        // Create new finished goods stock item
         const newItemId = crypto.randomUUID();
         stockItem = {
           id: newItemId,
-          productId,
-          setId,
+          productId: params.productId,
+          setId: params.setId,
           sizeId: entry.sizeId,
+          sizeName: entry.sizeName || entry.sizeId,
           physicalQuantity: 0,
           reservedQuantity: 0,
           dispatchableQuantity: 0,
-          storageLocation: 'Finished Bay A1',
+          storageLocation: 'Warehouse Ready Bay',
           lastProductionDate: now,
           createdAt: now,
           updatedAt: now,
         };
         localFinishedStock.push(stockItem);
 
-        // Insert into Supabase inventory_items
+        // Create Finished Goods item in Supabase inventory_items
         if (isSupabaseConfigured && navigator.onLine) {
           try {
             await supabase.from('inventory_items').insert({
               id: newItemId,
               item_type: 'FINISHED_GOODS',
-              sku: `FG-${productId.slice(0, 4)}-${setId.slice(0, 4)}-${entry.sizeId.slice(0, 4)}`.toUpperCase(),
-              name: `Ready Stock (${entry.sizeId})`,
-              product_id: isUuid(productId) ? productId : null,
-              set_id: isUuid(setId) ? setId : null,
+              sku: `FG-${params.productId.slice(0, 4)}-${params.setId.slice(0, 4)}-${entry.sizeId.slice(0, 4)}`.toUpperCase(),
+              name: `Ready Stock (${entry.sizeName || entry.sizeId})`,
+              product_id: isUuid(params.productId) ? params.productId : null,
+              set_id: isUuid(params.setId) ? params.setId : null,
               size_id: isUuid(entry.sizeId) ? entry.sizeId : null,
               unit: 'pcs',
-              current_stock: entry.quantity,
-              minimum_stock_threshold: 20,
-              reorder_level: 50,
+              current_stock: deltaToAdd,
+              minimum_stock_threshold: 15,
+              reorder_level: 40,
             });
           } catch (err) {
-            console.warn('Supabase inventory_item insert error on packing:', err);
+            console.warn('Supabase inventory_item insert error on production ready:', err);
           }
         }
       }
 
-      stockItem.physicalQuantity += entry.quantity;
+      // Update Stock Quantities
+      stockItem.physicalQuantity += deltaToAdd;
       stockItem.dispatchableQuantity = Math.max(0, stockItem.physicalQuantity - stockItem.reservedQuantity);
       stockItem.lastProductionDate = now;
       stockItem.updatedAt = now;
-      addedPcs += entry.quantity;
+
+      totalCredited += deltaToAdd;
+      sizeBreakdown[entry.sizeId] = (sizeBreakdown[entry.sizeId] || 0) + deltaToAdd;
 
       // Update Supabase current_stock
       if (isSupabaseConfigured && navigator.onLine && isUuid(stockItem.id)) {
@@ -491,47 +526,73 @@ export class FinishedGoodsService {
             })
             .eq('id', stockItem.id);
         } catch (err) {
-          console.warn('Supabase stock update error on packing:', err);
+          console.warn('Supabase stock update error on production credit:', err);
         }
       }
 
-      // Ledger Entry: PRODUCTION_OUTPUT
+      // Immutable Inventory Ledger Record (PRODUCTION_OUTPUT)
       await this.logInventoryLedgerEntry({
         itemId: stockItem.id,
         transactionType: 'IN',
-        quantityChange: entry.quantity,
+        quantityChange: deltaToAdd,
         balanceAfter: stockItem.physicalQuantity,
         referenceType: 'PRODUCTION_OUTPUT',
-        referenceId: batchId,
-        notes: `Packed & completed ${entry.quantity} pcs from Batch ${batchNumber} (Carton: ${cartonNumber || 'General'})`,
-        performerName: operatorName,
+        referenceId: params.productionOrderId,
+        notes: `Ready Stock credited from Batch ${params.productionNumber} (Size ${entry.sizeName || entry.sizeId}: +${deltaToAdd} pcs)${params.cartonNumber ? ` [Carton ${params.cartonNumber}]` : ''}`,
+        performerName: params.operatorName || 'Production Supervisor',
       });
+
+      // Update credit map
+      creditedMap[creditKey] = previouslyCredited + deltaToAdd;
     }
 
-    // Record Carton if specified
-    if (cartonNumber) {
-      const sizeBreakdown: Record<string, number> = {};
-      entries.forEach((e) => (sizeBreakdown[e.sizeId] = e.quantity));
+    saveCreditedMap(creditedMap);
+
+    // Save cartons if specified
+    if (params.cartonNumber && totalCredited > 0) {
       localCartons.push({
         id: crypto.randomUUID(),
-        cartonNumber,
-        batchId,
-        batchNumber,
-        totalPcs: addedPcs,
+        cartonNumber: params.cartonNumber,
+        batchId: params.productionOrderId,
+        batchNumber: params.productionNumber,
+        totalPcs: totalCredited,
         sizeBreakdown,
-        packedBy: operatorName || 'Packing Operator',
+        packedBy: params.operatorName || 'Packing Operator',
         packedDate: now,
         status: 'IN_STOCK',
       });
     }
 
-    processedPackingBatches.add(packingKey);
-
     try {
       localStorage.setItem('factory_finished_goods_stock', JSON.stringify(localFinishedStock));
+      localStorage.setItem('factory_cartons', JSON.stringify(localCartons));
     } catch {}
 
-    return { addedPcs };
+    return { creditedPcs: totalCredited, sizeBreakdown };
+  }
+
+  /**
+   * Helper alias for legacy recordPackingOutput
+   */
+  static async recordPackingOutput(
+    batchId: string,
+    batchNumber: string,
+    productId: string,
+    setId: string,
+    entries: Array<{ sizeId: string; quantity: number }>,
+    cartonNumber?: string,
+    operatorName?: string
+  ): Promise<{ addedPcs: number }> {
+    const res = await this.creditProductionToReadyStock({
+      productionOrderId: batchId,
+      productionNumber: batchNumber,
+      productId,
+      setId,
+      entries: entries.map((e) => ({ sizeId: e.sizeId, quantityPassed: e.quantity })),
+      cartonNumber,
+      operatorName,
+    });
+    return { addedPcs: res.creditedPcs };
   }
 
   /**
@@ -549,10 +610,9 @@ export class FinishedGoodsService {
     priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
     notes?: string;
   }): Promise<ProductionRequirement> {
-    const reqNumber = `REQ-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}${Math.floor(100 + Math.random() * 900)}`;
     const newReq: ProductionRequirement = {
       id: crypto.randomUUID(),
-      requirementNumber: reqNumber,
+      requirementNumber: `REQ-${Date.now().toString().slice(-6)}`,
       orderId: params.orderId,
       orderNumber: params.orderNumber,
       customerName: params.customerName,
@@ -562,10 +622,11 @@ export class FinishedGoodsService {
       requiredQuantity: params.requiredQuantity,
       producedQuantity: 0,
       remainingQuantity: params.requiredQuantity,
-      priority: params.priority || 'HIGH',
+      priority: params.priority || 'NORMAL',
       status: 'PENDING',
-      notes: params.notes || `Shortage replenishment for Order ${params.orderNumber || ''}`,
+      notes: params.notes,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     localRequirements.unshift(newReq);
@@ -577,101 +638,50 @@ export class FinishedGoodsService {
   }
 
   /**
-   * 8. PROCESS CUSTOMER RETURN WITH QC INSPECTION ROUTING
-   * GOOD ➔ Ready Stock
-   * DAMAGED ➔ Damaged Stock
-   * REWORK ➔ Rework Stage
+   * 8. GET STOCK MOVEMENTS & TRANSACTIONS FOR A PRODUCT
    */
-  static async processCustomerReturn(params: {
-    orderId?: string;
-    orderNumber?: string;
-    customerId: string;
-    customerName?: string;
-    productId: string;
-    setId: string;
-    sizeId: string;
-    returnedQuantity: number;
-    qcPassedQuantity: number;
-    qcDamagedQuantity: number;
-    qcReworkQuantity: number;
-    reason?: string;
-    inspectedBy?: string;
-  }): Promise<StockReturn> {
-    const returnNumber = `RTN-${Date.now().toString().slice(-6)}`;
-    const newReturn: StockReturn = {
-      id: crypto.randomUUID(),
-      returnNumber,
-      orderId: params.orderId,
-      orderNumber: params.orderNumber,
-      customerId: params.customerId,
-      customerName: params.customerName,
-      productId: params.productId,
-      setId: params.setId,
-      sizeId: params.sizeId,
-      returnedQuantity: params.returnedQuantity,
-      qcStatus: params.qcDamagedQuantity > 0 ? 'DAMAGED' : params.qcReworkQuantity > 0 ? 'REWORK' : 'GOOD',
-      qcPassedQuantity: params.qcPassedQuantity,
-      qcDamagedQuantity: params.qcDamagedQuantity,
-      qcReworkQuantity: params.qcReworkQuantity,
-      reason: params.reason,
-      inspectedBy: params.inspectedBy,
-      returnDate: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    };
+  static async getProductStockMovements(productId: string): Promise<InventoryTransaction[]> {
+    const stockItems = localFinishedStock.filter((s) => s.productId === productId);
+    const itemIds = new Set(stockItems.map((s) => s.id));
 
-    // If pieces passed QC as GOOD, add them back to Ready Finished Goods Stock
-    if (params.qcPassedQuantity > 0) {
-      const stockItem = localFinishedStock.find(
-        (s) => s.productId === params.productId && s.setId === params.setId && s.sizeId === params.sizeId
-      );
+    if (isSupabaseConfigured && navigator.onLine) {
+      try {
+        const { data, error } = await supabase
+          .from('inventory_transactions')
+          .select('*, inventory_items(*)')
+          .order('created_at', { ascending: false })
+          .limit(50);
 
-      if (stockItem) {
-        stockItem.physicalQuantity += params.qcPassedQuantity;
-        stockItem.dispatchableQuantity = Math.max(0, stockItem.physicalQuantity - stockItem.reservedQuantity);
-        stockItem.updatedAt = new Date().toISOString();
-
-        if (isSupabaseConfigured && navigator.onLine && isUuid(stockItem.id)) {
-          try {
-            await supabase
-              .from('inventory_items')
-              .update({
-                current_stock: stockItem.physicalQuantity,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', stockItem.id);
-          } catch (err) {
-            console.warn('Supabase stock update error on return:', err);
-          }
+        if (!error && data) {
+          return data
+            .filter((t: any) => itemIds.has(t.item_id) || t.inventory_items?.product_id === productId)
+            .map((t: any) => ({
+              id: t.id,
+              itemId: t.item_id,
+              itemName: t.inventory_items?.name,
+              transactionType: t.transaction_type,
+              quantityChange: Number(t.quantity_change || 0),
+              balanceAfter: Number(t.balance_after || 0),
+              referenceType: t.reference_type,
+              referenceId: t.reference_id,
+              notes: t.notes,
+              performerName: t.performed_by,
+              createdAt: t.created_at,
+            }));
         }
-
-        await this.logInventoryLedgerEntry({
-          itemId: stockItem.id,
-          transactionType: 'IN',
-          quantityChange: params.qcPassedQuantity,
-          balanceAfter: stockItem.physicalQuantity,
-          referenceType: 'RETURN',
-          referenceId: newReturn.id,
-          notes: `Customer return QC passed: ${params.qcPassedQuantity} pcs added to Ready Stock`,
-          performerName: params.inspectedBy,
-        });
+      } catch (err) {
+        console.warn('Supabase stock movements query error:', err);
       }
     }
 
-    localReturns.unshift(newReturn);
-    try {
-      localStorage.setItem('factory_stock_returns', JSON.stringify(localReturns));
-      localStorage.setItem('factory_finished_goods_stock', JSON.stringify(localFinishedStock));
-    } catch {}
-
-    return newReturn;
+    return localInventoryTransactions.filter((t) => itemIds.has(t.itemId));
   }
 
   /**
-   * 9. GET STOCK AGING REPORT
-   * Returns complete aging summary
+   * 9. GET STOCK AGING REPORT SUMMARY
    */
   static async getStockAgingReport(): Promise<StockAgingSummary> {
-    const stockList = await this.getFinishedGoodsStock();
+    const stock = await this.getFinishedGoodsStock();
 
     let b0To30 = 0;
     let b31To60 = 0;
@@ -685,16 +695,16 @@ export class FinishedGoodsService {
     let slowCount = 0;
     let deadCount = 0;
 
-    stockList.forEach((s) => {
+    stock.forEach((s) => {
       totalReady += s.physicalQuantity;
       totalReserved += s.reservedQuantity;
       totalDispatchable += s.dispatchableQuantity;
-      totalValue += s.physicalQuantity * (s.unitCost || s.sellingPrice || 500);
+      totalValue += s.physicalQuantity * (s.sellingPrice || s.unitCost || 0);
 
       if (s.agingBracket === '0-30') b0To30 += s.physicalQuantity;
       else if (s.agingBracket === '31-60') b31To60 += s.physicalQuantity;
       else if (s.agingBracket === '61-90') b61To90 += s.physicalQuantity;
-      else b90Plus += s.physicalQuantity;
+      else if (s.agingBracket === '90+') b90Plus += s.physicalQuantity;
 
       if (s.movementSpeed === 'FAST') fastCount++;
       else if (s.movementSpeed === 'SLOW') slowCount++;
@@ -719,7 +729,7 @@ export class FinishedGoodsService {
   /**
    * Helper: Log Immutable Ledger Entry to inventory_transactions
    */
-  private static async logInventoryLedgerEntry(entry: {
+  static async logInventoryLedgerEntry(entry: {
     itemId: string;
     transactionType: 'IN' | 'OUT' | 'ADJUSTMENT';
     quantityChange: number;
@@ -742,6 +752,11 @@ export class FinishedGoodsService {
       createdAt: new Date().toISOString(),
     };
 
+    localInventoryTransactions.unshift(newTx);
+    try {
+      localStorage.setItem('factory_inventory_transactions', JSON.stringify(localInventoryTransactions));
+    } catch {}
+
     if (isSupabaseConfigured && navigator.onLine && isUuid(entry.itemId)) {
       try {
         await supabase.from('inventory_transactions').insert({
@@ -761,6 +776,89 @@ export class FinishedGoodsService {
     }
   }
 
+  static async processCustomerReturn(input: {
+    customerId: string;
+    customerName?: string;
+    orderNumber: string;
+    productId: string;
+    setId: string;
+    sizeId: string;
+    returnedQuantity: number;
+    qcPassedQuantity: number;
+    qcDamagedQuantity: number;
+    qcReworkQuantity: number;
+    reason: string;
+    inspectedBy: string;
+  }): Promise<StockReturn> {
+    const returnRecord: StockReturn = {
+      id: crypto.randomUUID(),
+      returnNumber: `RET-${Date.now().toString().slice(-6)}`,
+      orderNumber: input.orderNumber,
+      customerId: input.customerId,
+      customerName: input.customerName || 'Customer',
+      productId: input.productId,
+      setId: input.setId,
+      sizeId: input.sizeId,
+      returnedQuantity: input.returnedQuantity,
+      qcPassedQuantity: input.qcPassedQuantity,
+      qcDamagedQuantity: input.qcDamagedQuantity,
+      qcReworkQuantity: input.qcReworkQuantity,
+      qcStatus: input.qcPassedQuantity > 0 ? 'GOOD' : input.qcReworkQuantity > 0 ? 'REWORK' : 'DAMAGED',
+      reason: input.reason,
+      inspectedBy: input.inspectedBy,
+      returnDate: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+
+    localReturns.unshift(returnRecord);
+    try {
+      localStorage.setItem('factory_stock_returns', JSON.stringify(localReturns));
+    } catch {}
+
+    // If any items passed QC, credit them back to Finished Goods Ready Stock
+    if (input.qcPassedQuantity > 0) {
+      let targetStock = localFinishedStock.find(
+        (s) => s.productId === input.productId && s.setId === input.setId && s.sizeId === input.sizeId
+      );
+
+      if (targetStock) {
+        targetStock.physicalQuantity += input.qcPassedQuantity;
+        targetStock.dispatchableQuantity += input.qcPassedQuantity;
+        targetStock.updatedAt = new Date().toISOString();
+
+        await this.logInventoryLedgerEntry({
+          itemId: targetStock.id,
+          transactionType: 'IN',
+          quantityChange: input.qcPassedQuantity,
+          balanceAfter: targetStock.physicalQuantity,
+          referenceType: 'CUSTOMER_RETURN',
+          referenceId: returnRecord.returnNumber,
+          notes: `Customer return restocked: ${input.qcPassedQuantity} pcs passed QC. Reason: ${input.reason}`,
+          performerName: input.inspectedBy,
+        });
+
+        if (isSupabaseConfigured && navigator.onLine && isUuid(targetStock.id)) {
+          try {
+            await supabase
+              .from('inventory_items')
+              .update({
+                current_stock: targetStock.physicalQuantity,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', targetStock.id);
+          } catch (err) {
+            console.warn('Supabase stock update error on return:', err);
+          }
+        }
+      }
+      try {
+        localStorage.setItem('factory_finished_goods_stock', JSON.stringify(localFinishedStock));
+      } catch {}
+    }
+
+    return returnRecord;
+  }
+
   static async getProductionRequirements(): Promise<ProductionRequirement[]> {
     return localRequirements;
   }
@@ -773,3 +871,4 @@ export class FinishedGoodsService {
     return localCartons;
   }
 }
+

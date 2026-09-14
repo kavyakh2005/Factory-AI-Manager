@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ProductService } from '../services/products/productService';
+import React, { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ProductService, ProductWithReadyStock } from '../services/products/productService';
 import { Product, Set as GarmentSet } from '../types';
 import { Button } from '../components/common/Button';
-import { Input } from '../components/common/Input';
 import { Badge } from '../components/common/Badge';
 import { ProductModal } from '../components/products/ProductModal';
 import { ProductDetailsModal } from '../components/products/ProductDetailsModal';
@@ -12,7 +11,6 @@ import {
   Package,
   Plus,
   Search,
-  Filter,
   Layers,
   Sparkles,
   Edit2,
@@ -24,7 +22,8 @@ import {
   Image as ImageIcon,
   CheckCircle2,
   XCircle,
-  Scissors,
+  AlertTriangle,
+  Boxes,
 } from 'lucide-react';
 
 export const ProductsPage: React.FC = () => {
@@ -35,6 +34,7 @@ export const ProductsPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
+  const [selectedStockFilter, setSelectedStockFilter] = useState<'ALL' | 'AVAILABLE' | 'LOW_STOCK' | 'OUT_OF_STOCK'>('ALL');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
   // Modals state
@@ -42,10 +42,10 @@ export const ProductsPage: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
 
-  // Queries
-  const { data: products = [], isLoading: productsLoading } = useQuery<Product[]>({
-    queryKey: ['products', selectedCategory, selectedStatus, search],
-    queryFn: () => ProductService.getProducts({ category: selectedCategory, status: selectedStatus, search }),
+  // Queries with Ready Stock computation from Finished Goods inventory
+  const { data: rawProducts = [], isLoading: productsLoading } = useQuery<ProductWithReadyStock[]>({
+    queryKey: ['products-with-ready-stock', selectedCategory, selectedStatus, search],
+    queryFn: () => ProductService.getProductsWithReadyStock({ category: selectedCategory, status: selectedStatus, search }),
   });
 
   const { data: sets = [] } = useQuery<GarmentSet[]>({
@@ -53,19 +53,28 @@ export const ProductsPage: React.FC = () => {
     queryFn: () => ProductService.getSetsWithSizes(),
   });
 
+  // Apply stock status filter if selected
+  const products = rawProducts.filter((p) => {
+    if (selectedStockFilter === 'ALL') return true;
+    return p.stockStatus === selectedStockFilter;
+  });
+
   // Calculate High-Level Metrics
-  const totalProducts = products.length;
-  const activeProducts = products.filter((p) => p.status === 'ACTIVE').length;
-  const categoriesList = Array.from(new Set(products.map((p) => p.category)));
+  const totalProducts = rawProducts.length;
+  const activeProducts = rawProducts.filter((p) => p.status === 'ACTIVE').length;
+  const categoriesList = Array.from(new Set(rawProducts.map((p) => p.category)));
+  const totalReadyStockPcs = rawProducts.reduce((acc, p) => acc + (p.totalReadyStock || 0), 0);
+  const lowStockCount = rawProducts.filter((p) => p.stockStatus === 'LOW_STOCK').length;
+  const outOfStockCount = rawProducts.filter((p) => p.stockStatus === 'OUT_OF_STOCK').length;
 
   const avgGrossMarginPercent =
-    products.length > 0
+    rawProducts.length > 0
       ? Number(
           (
-            products.reduce((acc, p) => {
+            rawProducts.reduce((acc, p) => {
               const { marginPercent } = ProductService.calculateMargins(p.costPrice, p.sellingPrice);
               return acc + marginPercent;
-            }, 0) / products.length
+            }, 0) / rawProducts.length
           ).toFixed(1)
         )
       : 0;
@@ -73,14 +82,14 @@ export const ProductsPage: React.FC = () => {
   const handleDeleteProduct = async (id: string, name: string) => {
     if (window.confirm(`Are you sure you want to remove "${name}" from the catalog?`)) {
       await ProductService.deleteProduct(id);
-      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['products-with-ready-stock'] });
     }
   };
 
   const handleToggleStatus = async (product: Product) => {
     const nextStatus = product.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
     await ProductService.updateProduct(product.id, { status: nextStatus });
-    queryClient.invalidateQueries({ queryKey: ['products'] });
+    queryClient.invalidateQueries({ queryKey: ['products-with-ready-stock'] });
   };
 
   return (
@@ -91,14 +100,17 @@ export const ProductsPage: React.FC = () => {
           <div className="flex items-center gap-2.5">
             <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
               <Package className="w-6 h-6 text-primary-400" />
-              Product Master & Garment Catalog
+              Product Master & Ready Stock
             </h1>
             <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-primary-500/20 text-primary-300 border border-primary-500/30">
               {totalProducts} Styles
             </span>
+            <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              {totalReadyStockPcs.toLocaleString()} Pcs in Ready Stock
+            </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Manage garment styles, tech pack specs, fabrics, wholesale price lists, and assigned size sets.
+            Permanent product master catalog integrated with live Finished Goods Ready Stock, QC-passed batches & size matrices.
           </p>
         </div>
 
@@ -145,7 +157,7 @@ export const ProductsPage: React.FC = () => {
       </div>
 
       {/* KPI Metric Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
         <div className="p-4 bg-factory-900/80 border border-slate-800 rounded-xl space-y-1">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Catalog</span>
           <div className="text-2xl font-black text-white">{totalProducts}</div>
@@ -164,13 +176,42 @@ export const ProductsPage: React.FC = () => {
           <span className="text-[10px] text-slate-500">Coord, Ethnic, Tops</span>
         </div>
 
-        <div className="p-4 bg-factory-900/80 border border-slate-800 rounded-xl space-y-1">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-            Avg Gross Margin
+        <div className="p-4 bg-factory-900/80 border border-emerald-950/40 bg-emerald-950/10 rounded-xl space-y-1">
+          <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+            <Boxes className="w-3.5 h-3.5 text-emerald-400" />
+            Total Ready Stock
           </span>
-          <div className="text-2xl font-black text-emerald-400">{avgGrossMarginPercent}%</div>
-          <span className="text-[10px] text-slate-500">Avg profit yield</span>
+          <div className="text-2xl font-black text-emerald-300">{totalReadyStockPcs}</div>
+          <span className="text-[10px] text-emerald-500">Finished goods ready</span>
+        </div>
+
+        <div 
+          onClick={() => setSelectedStockFilter(selectedStockFilter === 'LOW_STOCK' ? 'ALL' : 'LOW_STOCK')}
+          className={`p-4 border rounded-xl space-y-1 cursor-pointer transition-all ${
+            selectedStockFilter === 'LOW_STOCK' 
+              ? 'bg-amber-950/30 border-amber-500/50 ring-1 ring-amber-500/30' 
+              : 'bg-factory-900/80 border-slate-800 hover:border-slate-700'
+          }`}
+        >
+          <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+            Low Stock
+          </span>
+          <div className="text-2xl font-black text-amber-400">{lowStockCount}</div>
+          <span className="text-[10px] text-slate-500">Under 20 pcs available</span>
+        </div>
+
+        <div 
+          onClick={() => setSelectedStockFilter(selectedStockFilter === 'OUT_OF_STOCK' ? 'ALL' : 'OUT_OF_STOCK')}
+          className={`p-4 border rounded-xl space-y-1 cursor-pointer transition-all ${
+            selectedStockFilter === 'OUT_OF_STOCK' 
+              ? 'bg-rose-950/30 border-rose-500/50 ring-1 ring-rose-500/30' 
+              : 'bg-factory-900/80 border-slate-800 hover:border-slate-700'
+          }`}
+        >
+          <span className="text-[11px] font-bold text-rose-400 uppercase tracking-wider">Out of Stock</span>
+          <div className="text-2xl font-black text-rose-400">{outOfStockCount}</div>
+          <span className="text-[10px] text-slate-500">0 pcs available</span>
         </div>
       </div>
 
@@ -187,7 +228,7 @@ export const ProductsPage: React.FC = () => {
           />
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-semibold text-slate-400">Category:</span>
             <select
@@ -216,20 +257,34 @@ export const ProductsPage: React.FC = () => {
               <option value="INACTIVE">Inactive Only</option>
             </select>
           </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-slate-400">Stock Filter:</span>
+            <select
+              value={selectedStockFilter}
+              onChange={(e) => setSelectedStockFilter(e.target.value as any)}
+              className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-primary-500"
+            >
+              <option value="ALL">All Stock Levels</option>
+              <option value="AVAILABLE">🟢 Available (&gt;20 pcs)</option>
+              <option value="LOW_STOCK">🟠 Low Stock (1-20 pcs)</option>
+              <option value="OUT_OF_STOCK">🔴 Out of Stock (0 pcs)</option>
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Main Content Area: Table vs Grid */}
       {productsLoading ? (
         <div className="p-12 text-center text-slate-400 text-xs">
-          Loading garment catalog from database...
+          Loading garment catalog and ready stock from database...
         </div>
       ) : products.length === 0 ? (
         <div className="p-12 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-950/40 space-y-3">
           <Package className="w-10 h-10 text-slate-600 mx-auto" />
           <div className="text-sm font-bold text-slate-300">No products found</div>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            {search || selectedCategory !== 'ALL'
+            {search || selectedCategory !== 'ALL' || selectedStockFilter !== 'ALL'
               ? 'No products match your search filter.'
               : 'Add your first garment style to get started with Order and Production management.'}
           </p>
@@ -254,18 +309,17 @@ export const ProductsPage: React.FC = () => {
                 <th className="py-3 px-4">Garment Style</th>
                 <th className="py-3 px-4">Code / SKU</th>
                 <th className="py-3 px-4">Category & Fabric</th>
-                <th className="py-3 px-4">Assigned Sets</th>
+                <th className="py-3 px-4">Ready Stock Breakdown</th>
                 <th className="py-3 px-4 text-right">Cost Price</th>
                 <th className="py-3 px-4 text-right">Wholesale Rate</th>
                 <th className="py-3 px-4 text-center">Gross Margin</th>
-                <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4 text-center">Stock Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-xs text-slate-300">
               {products.map((p) => {
                 const { grossMargin, marginPercent } = ProductService.calculateMargins(p.costPrice, p.sellingPrice);
-                const assignedSets = p.productSets?.map((ps) => ps.set).filter(Boolean) as GarmentSet[] || [];
 
                 return (
                   <tr
@@ -309,21 +363,41 @@ export const ProductsPage: React.FC = () => {
                       <div className="text-[11px] text-slate-400 mt-0.5">{p.fabric}</div>
                     </td>
 
-                    {/* Assigned Sets Chips */}
+                    {/* Size-Wise Ready Stock Breakdown */}
                     <td className="py-3 px-4">
-                      <div className="flex flex-wrap gap-1 max-w-xs">
-                        {assignedSets.length > 0 ? (
-                          assignedSets.map((s) => (
-                            <span
-                              key={s.id}
-                              className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700"
-                              title={`Sizes: ${s.setSizes?.map((ss) => ss.size?.name).join(', ')}`}
-                            >
-                              {s.name}
+                      <div className="space-y-1.5 max-w-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-emerald-400">
+                            {p.totalReadyStock || 0} {p.unit || 'pcs'}
+                          </span>
+                          {p.totalReservedStock > 0 && (
+                            <span className="text-[10px] text-amber-400 font-medium">
+                              ({p.totalReservedStock} reserved)
                             </span>
-                          ))
+                          )}
+                        </div>
+
+                        {/* Set & Size breakdown badges */}
+                        {p.setWiseStock && p.setWiseStock.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {p.setWiseStock.flatMap((s) =>
+                              s.sizes.map((sz) => (
+                                <span
+                                  key={`${s.setId}-${sz.sizeId}`}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border ${
+                                    sz.physicalQuantity > 0
+                                      ? 'bg-slate-900 text-emerald-300 border-emerald-500/30'
+                                      : 'bg-slate-950 text-slate-500 border-slate-800'
+                                  }`}
+                                  title={`${s.setName} - Size ${sz.sizeName}: ${sz.physicalQuantity} physical (${sz.dispatchableQuantity} dispatchable)`}
+                                >
+                                  {sz.sizeName}: <span className="font-bold">{sz.physicalQuantity}</span>
+                                </span>
+                              ))
+                            )}
+                          </div>
                         ) : (
-                          <span className="text-slate-500 text-[11px] italic">Global sets</span>
+                          <span className="text-slate-500 text-[10px] italic">No stock registered</span>
                         )}
                       </div>
                     </td>
@@ -356,24 +430,32 @@ export const ProductsPage: React.FC = () => {
                       </div>
                     </td>
 
-                    {/* Status */}
+                    {/* Stock Status Badge */}
                     <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => canManage && handleToggleStatus(p)}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
-                          p.status === 'ACTIVE'
-                            ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
-                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                          p.stockStatus === 'AVAILABLE'
+                            ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                            : p.stockStatus === 'LOW_STOCK'
+                            ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                            : 'bg-rose-500/10 text-rose-300 border-rose-500/30'
                         }`}
-                        title="Click to toggle status"
                       >
-                        {p.status === 'ACTIVE' ? (
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                        ) : (
-                          <XCircle className="w-3 h-3 text-slate-500" />
-                        )}
-                        {p.status}
-                      </button>
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            p.stockStatus === 'AVAILABLE'
+                              ? 'bg-emerald-400 animate-pulse'
+                              : p.stockStatus === 'LOW_STOCK'
+                              ? 'bg-amber-400'
+                              : 'bg-rose-400'
+                          }`}
+                        />
+                        {p.stockStatus === 'AVAILABLE'
+                          ? 'Available'
+                          : p.stockStatus === 'LOW_STOCK'
+                          ? 'Low Stock'
+                          : 'Out of Stock'}
+                      </span>
                     </td>
 
                     {/* Actions */}
@@ -382,7 +464,7 @@ export const ProductsPage: React.FC = () => {
                         <button
                           onClick={() => setViewingProduct(p)}
                           className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-100 transition-colors"
-                          title="View Specifications"
+                          title="View Ready Stock & Specs"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
@@ -420,7 +502,6 @@ export const ProductsPage: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {products.map((p) => {
             const { grossMargin, marginPercent } = ProductService.calculateMargins(p.costPrice, p.sellingPrice);
-            const assignedSets = p.productSets?.map((ps) => ps.set).filter(Boolean) as GarmentSet[] || [];
 
             return (
               <div
@@ -448,17 +529,26 @@ export const ProductsPage: React.FC = () => {
                       </span>
                     </div>
                     <div className="absolute top-2.5 right-2.5">
-                      <Badge
-                        variant={p.status === 'ACTIVE' ? 'success' : 'neutral'}
-                        size="sm"
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border backdrop-blur-md ${
+                          p.stockStatus === 'AVAILABLE'
+                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                            : p.stockStatus === 'LOW_STOCK'
+                            ? 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                            : 'bg-rose-950/80 text-rose-300 border-rose-500/40'
+                        }`}
                       >
-                        {p.status}
-                      </Badge>
+                        {p.stockStatus === 'AVAILABLE'
+                          ? '🟢 Available'
+                          : p.stockStatus === 'LOW_STOCK'
+                          ? '🟠 Low Stock'
+                          : '🔴 Out of Stock'}
+                      </span>
                     </div>
                   </div>
 
                   {/* Card Body */}
-                  <div className="p-4 space-y-2.5">
+                  <div className="p-4 space-y-3">
                     <div>
                       <h3 className="font-bold text-slate-100 text-sm group-hover:text-primary-300 transition-colors line-clamp-1">
                         {p.name}
@@ -468,20 +558,30 @@ export const ProductsPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Assigned Sets */}
-                    <div className="flex flex-wrap gap-1">
-                      {assignedSets.slice(0, 2).map((s) => (
-                        <span
-                          key={s.id}
-                          className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-800 text-slate-300"
-                        >
-                          {s.name}
-                        </span>
-                      ))}
-                      {assignedSets.length > 2 && (
-                        <span className="text-[9px] text-slate-500 self-center">
-                          +{assignedSets.length - 2} more
-                        </span>
+                    {/* Ready Stock Size Breakdown */}
+                    <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-slate-400">Total Ready Stock:</span>
+                        <span className="font-black text-emerald-400">{p.totalReadyStock || 0} {p.unit || 'pcs'}</span>
+                      </div>
+
+                      {p.setWiseStock && p.setWiseStock.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {p.setWiseStock.flatMap((s) =>
+                            s.sizes.map((sz) => (
+                              <span
+                                key={`${s.setId}-${sz.sizeId}`}
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-medium ${
+                                  sz.physicalQuantity > 0
+                                    ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-800/40'
+                                    : 'bg-slate-900 text-slate-600 border border-slate-800'
+                                }`}
+                              >
+                                {sz.sizeName}: {sz.physicalQuantity}
+                              </span>
+                            ))
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -512,11 +612,11 @@ export const ProductsPage: React.FC = () => {
         product={editingProduct}
         availableSets={sets}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['products'] });
+          queryClient.invalidateQueries({ queryKey: ['products-with-ready-stock'] });
         }}
       />
 
-      {/* Product Details Specification Modal */}
+      {/* Product Details Specification & Ready Stock Modal */}
       <ProductDetailsModal
         isOpen={!!viewingProduct}
         onClose={() => setViewingProduct(null)}
@@ -529,3 +629,4 @@ export const ProductsPage: React.FC = () => {
     </div>
   );
 };
+
