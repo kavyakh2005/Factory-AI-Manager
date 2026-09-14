@@ -2,7 +2,7 @@
 
 > **Identity**: Shree Raas Krishnam Creation — Industrial Modern High-Contrast Theme  
 > **Target Viewports**: Mobile Phones (320px–430px), Tablets (768px–1024px), Desktop & 4K Displays (1280px–1920px+)  
-> **Key Metric**: Zero Page-Level Horizontal Overflow & Full Touch Target Accessibility ($\ge 44\text{px}$).
+> **Key Metric**: Zero Page-Level Horizontal Overflow, Full Touch Target Accessibility ($\ge 44\text{px}$), and Native PWA Experience.
 
 ---
 
@@ -66,7 +66,7 @@
 1. **Dashboard (`/dashboard`)**: KPI metric cards, AI Executive Briefing summary, live streams for recent orders and shop-floor batches.
 2. **Orders (`/orders`)**: 2D size-matrix piece booking, automatic tax and line totals, status filters, and order details view.
 3. **Production (`/production`)**: 7-stage pipeline Kanban/Table switcher, bottleneck delay alert banner, size-wise piece output and QC defect logger modal.
-4. **Inventory (`/inventory`)**: Live stock balance tabs (Raw Materials, WIP, Finished Goods), In/Out stock adjustment modal, and immutable movement ledger.
+4. **Inventory (`/inventory`)**: Live stock balance tabs (Raw Materials, WIP, Ready Finished Goods, Aging), In/Out stock adjustment modal, and immutable movement ledger.
 5. **Purchases (`/purchases`)**: Supplier procurement PO generator, line items, and dock receiving modal.
 6. **Dispatch (`/dispatch`)**: Delivery manifests, carton counts, tracking LR numbers, and transporter logs.
 7. **Products (`/products`)**: Style catalog, tech-pack specs, fabric details, cost/selling price margins, and assigned sets.
@@ -76,7 +76,7 @@
 11. **Payments (`/payments`)**: Financial cashflow ledger for customer receipts and supplier disbursements.
 12. **Expenses (`/expenses`)**: Factory overhead voucher logging across categories with total cost summaries.
 13. **Reports (`/reports`)**: Executive analytics for sales, production output, inventory valuation, and cash balance with CSV export.
-14. **AI Manager (`/ai-manager`)**: Gemini 1.5 Flash grounded assistant, Executive Daily Briefing, Fabric Lay Plan Estimator, QC Defect Root-Cause Analyzer, and RAG Context Inspector.
+14. **AI Manager (`/ai-manager`)**: Google Gemini AI reasoning engine (`gemini-3.6-flash`, `gemini-3.5-flash`), Executive Daily Briefing, Fabric Lay Plan Estimator, QC Defect Root-Cause Analyzer (100% real database logs), and Live RAG Context Inspector.
 15. **Notifications (`/notifications`)**: Real-time operational warnings for low stock, delays, and receivables.
-16. **Settings (`/settings`)**: Factory profile, GSTIN, currency, tax rates, staff RBAC directory, and audit logs.
-17. **Login (`/login`)**: Centered authentication card with pre-configured Factory Owner quick-fill button.
+16. **Settings (`/settings`)**: Factory profile, GSTIN, currency, tax rates, staff RBAC directory, audit logs, and Gemini API Key configuration.
+17. **Login (`/login`)**: Centered authentication card with salted SHA-256 validation, Google Sign-In button, and Factory Owner quick-fill helper.

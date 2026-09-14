@@ -157,8 +157,46 @@ export async function purgeExpiredLocalData(maxAgeMs = LOCAL_RETENTION_MS): Prom
   }
 }
 
-// Automatically trigger purge check on boot
+/**
+ * Completely wipe all local database and cache stores clean
+ */
+export async function wipeAllLocalData(): Promise<void> {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (
+        key &&
+        (key.startsWith('factory_cache_') ||
+          key.startsWith('factory_data_') ||
+          key.startsWith('factory_production_') ||
+          key.startsWith('factory_finished_') ||
+          key.startsWith('factory_stock_') ||
+          key.startsWith('factory_custom_'))
+      ) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+    const db = await getLocalDb();
+    for (const storeName of db.objectStoreNames) {
+      const tx = db.transaction(storeName, 'readwrite');
+      await tx.store.clear();
+      await tx.done;
+    }
+    console.log('✅ All local cached data completely wiped clean.');
+  } catch (err) {
+    console.warn('Error wiping local data:', err);
+  }
+}
+
+// Automatically trigger one-time clean slate wipe and purge check on boot
 if (typeof window !== 'undefined') {
+  if (localStorage.getItem('factory_clean_slate_wiped_v1') !== 'true') {
+    localStorage.setItem('factory_clean_slate_wiped_v1', 'true');
+    wipeAllLocalData();
+  }
   setTimeout(() => {
     purgeExpiredLocalData();
   }, 1000);

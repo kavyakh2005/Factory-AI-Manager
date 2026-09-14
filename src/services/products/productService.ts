@@ -54,104 +54,10 @@ export const DEFAULT_FACTORY_COLORS = [
   { id: 'col-teal', name: 'Teal Blue', hex: '#0d9488', sku: 'TEL' },
 ];
 
-export const DEFAULT_FACTORY_SETS: GarmentSet[] = [
-  {
-    id: 'set-std-adult',
-    name: 'Standard Adult Pack (38 to 44)',
-    code: 'SET-STD-38-44',
-    type: 'ADULT',
-    description: 'Standard 4-size ratio pack for men/women kurtas and shirts (38, 40, 42, 44)',
-    status: 'ACTIVE',
-    sortOrder: 1,
-    setSizes: [
-      { id: 'ss-1', setId: 'set-std-adult', sizeId: 'sz-38', sequence: 1, ratio: 1, size: DEFAULT_FACTORY_SIZES.find((s) => s.id === 'sz-38')! },
-      { id: 'ss-2', setId: 'set-std-adult', sizeId: 'sz-40', sequence: 2, ratio: 2, size: DEFAULT_FACTORY_SIZES.find((s) => s.id === 'sz-40')! },
-      { id: 'ss-3', setId: 'set-std-adult', sizeId: 'sz-42', sequence: 3, ratio: 2, size: DEFAULT_FACTORY_SIZES.find((s) => s.id === 'sz-42')! },
-      { id: 'ss-4', setId: 'set-std-adult', sizeId: 'sz-44', sequence: 4, ratio: 1, size: DEFAULT_FACTORY_SIZES.find((s) => s.id === 'sz-44')! },
-    ],
-  },
-  {
-    id: 'set-plus-adult',
-    name: 'Plus Size Pack (46 to 52)',
-    code: 'SET-PLS-46-52',
-    type: 'ADULT',
-    description: 'Plus size range pack (46, 48, 50, 52)',
-    status: 'ACTIVE',
-    sortOrder: 2,
-    setSizes: [
-      { id: 'ss-5', setId: 'set-plus-adult', sizeId: 'sz-46', sequence: 1, ratio: 1, size: DEFAULT_FACTORY_SIZES.find((s) => s.id === 'sz-46')! },
-      { id: 'ss-6', setId: 'set-plus-adult', sizeId: 'sz-48', sequence: 2, ratio: 1, size: DEFAULT_FACTORY_SIZES.find((s) => s.id === 'sz-48')! },
-      { id: 'ss-7', setId: 'set-plus-adult', sizeId: 'sz-50', sequence: 3, ratio: 1, size: DEFAULT_FACTORY_SIZES.find((s) => s.id === 'sz-50')! },
-      { id: 'ss-8', setId: 'set-plus-adult', sizeId: 'sz-52', sequence: 4, ratio: 1, size: DEFAULT_FACTORY_SIZES.find((s) => s.id === 'sz-52')! },
-    ],
-  },
-];
-
-export const DEFAULT_FACTORY_PRODUCTS: Product[] = [
-  {
-    id: 'prd-101',
-    code: 'SRK-KT-101',
-    name: 'Royal Heritage Embroidered Kurta',
-    category: 'KURTA',
-    subcategory: 'FESTIVE_WEAR',
-    fabric: 'Pure Cotton Silk Slub',
-    unit: 'PCS',
-    costPrice: 450,
-    sellingPrice: 850,
-    wholesalePrice: 650,
-    retailPrice: 1299,
-    taxRate: 5,
-    status: 'ACTIVE',
-    productSets: [
-      {
-        id: 'ps-101-1',
-        productId: 'prd-101',
-        setId: 'set-std-adult',
-        isDefault: true,
-        set: DEFAULT_FACTORY_SETS[0],
-      },
-    ],
-    variants: [
-      { id: 'var-101-1', productId: 'prd-101', color: 'Navy Blue', colorCode: '#1e3a8a', sku: 'SRK-KT-101-NAV', status: 'ACTIVE' },
-      { id: 'var-101-2', productId: 'prd-101', color: 'Maroon / Wine', colorCode: '#881337', sku: 'SRK-KT-101-MAR', status: 'ACTIVE' },
-      { id: 'var-101-3', productId: 'prd-101', color: 'Mustard Yellow', colorCode: '#ca8a04', sku: 'SRK-KT-101-MST', status: 'ACTIVE' },
-    ],
-  },
-  {
-    id: 'prd-102',
-    code: 'SRK-SH-202',
-    name: 'Executive Slim Linen Shirt',
-    category: 'SHIRTS',
-    subcategory: 'FORMAL',
-    fabric: '100% Linen Cambric',
-    unit: 'PCS',
-    costPrice: 380,
-    sellingPrice: 790,
-    wholesalePrice: 580,
-    retailPrice: 1199,
-    taxRate: 5,
-    status: 'ACTIVE',
-    productSets: [
-      {
-        id: 'ps-102-1',
-        productId: 'prd-102',
-        setId: 'set-std-adult',
-        isDefault: true,
-        set: DEFAULT_FACTORY_SETS[0],
-      },
-    ],
-    variants: [
-      { id: 'var-102-1', productId: 'prd-102', color: 'Pure White', colorCode: '#f8fafc', sku: 'SRK-SH-202-WHT', status: 'ACTIVE' },
-      { id: 'var-102-2', productId: 'prd-102', color: 'Sky Blue', colorCode: '#38bdf8', sku: 'SRK-SH-202-SKY', status: 'ACTIVE' },
-      { id: 'var-102-3', productId: 'prd-102', color: 'Charcoal Grey', colorCode: '#334155', sku: 'SRK-SH-202-CHR', status: 'ACTIVE' },
-    ],
-  },
-];
-
-// In-Memory Fallback & Offline Cache
+// In-Memory Fallback & Offline Cache - Starts completely empty for authentic user testing
 let localSizesMemory: Size[] = LocalStorageManager.getSyncItems<Size>('sizes', [...DEFAULT_FACTORY_SIZES]);
-let localSetsMemory: GarmentSet[] = LocalStorageManager.getSyncItems<GarmentSet>('sets', DEFAULT_FACTORY_SETS);
-let localProductsMemory: Product[] = LocalStorageManager.getSyncItems<Product>('products', DEFAULT_FACTORY_PRODUCTS);
+let localSetsMemory: GarmentSet[] = LocalStorageManager.getSyncItems<GarmentSet>('sets', []);
+let localProductsMemory: Product[] = LocalStorageManager.getSyncItems<Product>('products', []);
 
 export class ProductService {
   // ==========================================

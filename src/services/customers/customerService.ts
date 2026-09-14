@@ -3,55 +3,7 @@ import { LocalStorageManager } from '../storage/localDb';
 import { Customer, CreateCustomerInput, Order } from '../../types';
 import { sanitizeInput } from '../../utils/security';
 
-export const DEFAULT_FACTORY_CUSTOMERS: Customer[] = [
-  {
-    id: 'c-1',
-    customerCode: 'CUST-101',
-    name: 'Shree Ganesh Fashion Hub',
-    companyName: 'Ganesh Retailers Pvt Ltd',
-    phone: '+91 98201 23456',
-    email: 'ganeshfashion@gmail.com',
-    address: 'Ring Road Cloth Market, Surat',
-    city: 'Surat',
-    state: 'Gujarat',
-    gstNumber: '24AAACG1234F1Z5',
-    creditLimit: 250000,
-    paymentTermsDays: 30,
-    status: 'ACTIVE',
-  },
-  {
-    id: 'c-2',
-    customerCode: 'CUST-102',
-    name: 'Royal Garments Emporium',
-    companyName: 'Royal Garments Mumbai',
-    phone: '+91 98112 34567',
-    email: 'contact@royalgarments.in',
-    address: 'Kalbadevi Main Road, Marine Lines',
-    city: 'Mumbai',
-    state: 'Maharashtra',
-    gstNumber: '27AABCR5678K1ZQ',
-    creditLimit: 500000,
-    paymentTermsDays: 45,
-    status: 'ACTIVE',
-  },
-  {
-    id: 'c-3',
-    customerCode: 'CUST-103',
-    name: 'Vardhman Apparels Jaipur',
-    companyName: 'Vardhman Wholesale Traders',
-    phone: '+91 94140 88990',
-    email: 'vardhmanjaipur@gmail.com',
-    address: 'Johari Bazar Textile Complex',
-    city: 'Jaipur',
-    state: 'Rajasthan',
-    gstNumber: '08AACCV9988D1Z2',
-    creditLimit: 150000,
-    paymentTermsDays: 30,
-    status: 'ACTIVE',
-  },
-];
-
-let localCustomersMemory: Customer[] = LocalStorageManager.getSyncItems<Customer>('customers', DEFAULT_FACTORY_CUSTOMERS);
+let localCustomersMemory: Customer[] = LocalStorageManager.getSyncItems<Customer>('customers', []);
 
 export class CustomerService {
   static async getCustomers(filters?: { search?: string; status?: string }): Promise<Customer[]> {
@@ -99,7 +51,7 @@ export class CustomerService {
     }
 
     if (localCustomersMemory.length === 0) {
-      const cached = await LocalStorageManager.getCachedItems<Customer>('customers', DEFAULT_FACTORY_CUSTOMERS);
+      const cached = await LocalStorageManager.getCachedItems<Customer>('customers', []);
       localCustomersMemory = cached;
     }
 

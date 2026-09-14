@@ -230,53 +230,9 @@ export class ProductionService {
       }
     }
 
-    // Auto-generate initial production batches from confirmed orders if none exist
-    if (localProductionOrders.length === 0 && orders.length > 0) {
-      const confirmedOrders = orders.filter((o) => o.status === 'CONFIRMED' || o.status === 'IN_PRODUCTION');
-      if (confirmedOrders.length > 0) {
-        const autoBatches: ProductionOrder[] = confirmedOrders.map((ord, idx) => {
-          const firstItem = ord.orderItems?.[0];
-          const prodObj = products.find((p) => p.id === firstItem?.productId) || products[0];
-          const setObj = sets.find((s) => s.id === firstItem?.setId) || sets[0];
-          const stage = stages[idx % Math.min(3, stages.length)] || stages[0];
-
-          const plannedSizes: Record<string, number> = {};
-          ord.orderItems?.forEach((item) => {
-            plannedSizes[item.sizeId] = item.quantity;
-          });
-
-          return {
-            id: `prod-auto-${ord.id}`,
-            productionNumber: `PROD-2026-${(101 + idx).toString().padStart(4, '0')}`,
-            orderId: ord.id,
-            order: ord,
-            productId: prodObj?.id || '',
-            product: prodObj,
-            variantId: firstItem?.variantId || 'Navy Blue',
-            setId: setObj?.id || '',
-            set: setObj,
-            currentStageId: stage.id,
-            currentStage: stage,
-            totalPlannedQty: ord.totalQuantity,
-            totalCompletedQty: stage.sequence > 1 ? Math.round(ord.totalQuantity * 0.4) : 0,
-            totalRejectedQty: 0,
-            startDate: ord.orderDate || new Date().toISOString(),
-            targetCompletionDate: ord.deliveryDate || new Date(Date.now() + 86400000 * 5).toISOString(),
-            status: 'IN_PROGRESS',
-            assignedTeam: `Floor Line ${idx + 1}`,
-            notes: `Auto-scheduled from Order ${ord.orderNumber}`,
-            createdAt: ord.createdAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            entries: [],
-            plannedSizes,
-          };
-        });
-
-        localProductionOrders = autoBatches;
-        try {
-          localStorage.setItem('factory_production_orders', JSON.stringify(autoBatches));
-        } catch {}
-      }
+    if (localProductionOrders.length === 0) {
+      const cached = await LocalStorageManager.getCachedItems<ProductionOrder>('production_orders', []);
+      localProductionOrders = cached;
     }
 
     // Local / In-memory Fallback

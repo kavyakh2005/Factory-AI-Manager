@@ -34,6 +34,9 @@ erDiagram
     PRODUCTION_ENTRIES }o--|| SIZES : dimension
     PRODUCTION_ENTRIES }o--o| REJECTION_REASONS : defect
     
+    PRODUCTS ||--o{ FINISHED_GOODS_STOCK : tracks
+    SIZES ||--o{ FINISHED_GOODS_STOCK : size
+    
     SUPPLIERS ||--o{ PURCHASE_ORDERS : fulfills
     SUPPLIERS ||--o{ PAYMENTS : receives
     PURCHASE_ORDERS ||--o{ PURCHASE_ORDER_ITEMS : contains
@@ -133,7 +136,18 @@ Individual dimensions.
 
 ---
 
-### 2.3. Orders, Production & Quality Control
+### 2.3. Ready Stock, Orders, Production & Quality Control
+
+#### `finished_goods_stock` (Ready Finished Stock)
+- `id` (UUID, Primary Key)
+- `product_id` (UUID, FK ➔ `products.id`)
+- `set_id` (UUID, FK ➔ `sets.id`)
+- `size_id` (UUID, FK ➔ `sizes.id`)
+- `physical_quantity` (INT, DEFAULT 0)
+- `reserved_quantity` (INT, DEFAULT 0)
+- `dispatchable_quantity` (INT, GENERATED / COMPUTED: physical - reserved)
+- `movement_speed` (VARCHAR(20), `'FAST'`, `'SLOW'`, `'DEAD'`)
+- `last_movement_at` (TIMESTAMPTZ)
 
 #### `orders`
 Wholesale customer orders.
@@ -161,7 +175,7 @@ Wholesale customer orders.
 Shop-floor batch tracking.
 - `id` (UUID, Primary Key)
 - `production_number` (VARCHAR(100), UNIQUE, e.g. `PRD-BATCH-101`)
-- `order_id` (UUID, FK ➔ `orders.id`)
+- `order_id` (UUID, FK ➔ `orders.id`, NULLABLE for Ready Stock batches)
 - `product_id` (UUID, FK ➔ `products.id`)
 - `set_id` (UUID, FK ➔ `sets.id`)
 - `current_stage_id` (UUID, FK ➔ `production_stages.id`)
@@ -218,4 +232,4 @@ Shop-floor batch tracking.
 - Operating overhead vouchers across categories (Electricity, Maintenance, Rent, Spares, Welfare).
 
 #### `app_settings`
-- Legal entity name (`Shree Raas Krishnam Creation`), Address, GSTIN, default tax %, currency symbol, and AI Gemini configuration.
+- Legal entity name (`Shree Raas Krishnam Creation`), Address, GSTIN, default tax %, currency symbol, and Google Gemini API configuration.

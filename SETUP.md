@@ -9,7 +9,7 @@
 
 - **Node.js**: `v18.x`, `v20.x`, or `v22.x`
 - **NPM**: `v9.x` or `v10.x`
-- **Web Browser**: Chrome, Edge, Safari, Firefox, or Brave (Mobile, Tablet & Desktop supported)
+- **Web Browser**: Chrome, Edge, Safari, Firefox, or Brave (Mobile, Tablet, Desktop & PWA supported)
 
 ---
 
@@ -22,9 +22,12 @@ Create or update your [`.env`](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desk
 VITE_SUPABASE_URL="https://mnnfdedjfffsogdiaoct.supabase.co"
 VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
-# (Optional) Google Gemini API Key for AI Intelligence Engine
+# Google Gemini API Key for AI Intelligence Engine
 # Can also be dynamically configured via Settings or AI Manager UI modal
 VITE_GEMINI_API_KEY="your-google-gemini-api-key"
+
+# AI Microservice (Optional)
+VITE_AI_SERVICE_URL="http://localhost:8000"
 ```
 
 ---
@@ -54,6 +57,9 @@ npm run dev
 
 Open **`http://localhost:5173`** in your browser.
 
+> [!NOTE]
+> **Localhost Isolation Mode**: When running on `localhost` or `127.0.0.1`, data mutations are isolated to browser storage (LocalStorage + IndexedDB) with a **7-day auto-purge TTL**, allowing safe offline and local testing without modifying production database records.
+
 ---
 
 ## 5. Master Factory Owner Login Credentials
@@ -64,16 +70,19 @@ Open **`http://localhost:5173`** in your browser.
 | **Password** | `Kavya@2005` |
 | **User Role** | `OWNER` (Full Master Administrative, Financial & Operational Access) |
 
+> [!TIP]
+> **Google Sign-In**: Users can also log in seamlessly using the "Sign in with Google" button on the login screen.
+
 ---
 
 ## 6. Build & Production Deployment
 
 ```bash
-# Build optimized production bundle
+# Build optimized production bundle with PWA service worker
 npm run build
 
 # Preview production build locally
 npm run preview
 ```
 
-The output bundle is generated inside `dist/` ready for zero-config deployment on Vercel, Netlify, Cloudflare Pages, or AWS S3/CloudFront.
+The output bundle is generated inside `dist/` with PWA service worker and manifest ready for zero-config deployment on Vercel, Netlify, Cloudflare Pages, or AWS S3/CloudFront.

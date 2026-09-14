@@ -101,6 +101,9 @@ export const AiManagerPage: React.FC = () => {
         AiService.compileLiveDatabaseContext(),
       ]);
       setProducts(prods);
+      if (prods.length > 0 && prods[0]?.name) {
+        setSelectedProduct(prods[0].name);
+      }
       setLiveContextText(context);
     } catch (err) {
       console.warn('Initial AI manager load error:', err);
@@ -599,20 +602,27 @@ export const AiManagerPage: React.FC = () => {
                 <label className="text-xs font-semibold text-slate-400 block mb-1">
                   Product Style
                 </label>
-                <select
-                  value={selectedProduct}
-                  onChange={(e) => setSelectedProduct(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="Kurti Pant Coord Set">Kurti Pant Coord Set</option>
-                  <option value="Festive Anarkali 3-Piece Set">Festive Anarkali 3-Piece Set</option>
-                  <option value="Straight Kurta with Dupatta">Straight Kurta with Dupatta</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name} ({p.code})
-                    </option>
-                  ))}
-                </select>
+                {products.length > 0 ? (
+                  <select
+                    value={selectedProduct}
+                    onChange={(e) => setSelectedProduct(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {products.map((p) => (
+                      <option key={p.id} value={p.name}>
+                        {p.name} {p.code ? `(${p.code})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={selectedProduct}
+                    onChange={(e) => setSelectedProduct(e.target.value)}
+                    placeholder="Enter garment style name (e.g. Kurti Pant Set)..."
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                )}
               </div>
 
               <div>
@@ -791,22 +801,29 @@ export const AiManagerPage: React.FC = () => {
                     Top Defect Categories
                   </h3>
                   <div className="space-y-2.5">
-                    {qcAnalysis.topDefectReasons.map((dr, idx) => (
-                      <div key={idx} className="space-y-1">
-                        <div className="flex justify-between text-xs font-semibold">
-                          <span className="text-slate-300">{dr.reason}</span>
-                          <span className="text-red-400">
-                            {dr.count} pcs ({dr.percentage}%)
-                          </span>
+                    {qcAnalysis.topDefectReasons.length > 0 ? (
+                      qcAnalysis.topDefectReasons.map((dr, idx) => (
+                        <div key={idx} className="space-y-1">
+                          <div className="flex justify-between text-xs font-semibold">
+                            <span className="text-slate-300">{dr.reason}</span>
+                            <span className="text-red-400">
+                              {dr.count} pcs ({dr.percentage}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className="bg-red-500 h-full rounded-full"
+                              style={{ width: `${dr.percentage}%` }}
+                            ></div>
+                          </div>
                         </div>
-                        <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className="bg-red-500 h-full rounded-full"
-                            style={{ width: `${dr.percentage}%` }}
-                          ></div>
-                        </div>
+                      ))
+                    ) : (
+                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-2 text-xs text-emerald-400">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span>Zero defects logged in database — 100% Quality Pass Rate</span>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
 
@@ -818,7 +835,9 @@ export const AiManagerPage: React.FC = () => {
                     {qcAnalysis.stageWiseDefectDistribution.map((stg, idx) => (
                       <div key={idx} className="flex justify-between items-center p-2.5 bg-slate-800/60 rounded-lg border border-slate-750 text-xs">
                         <span className="font-semibold text-white">{stg.stageName}</span>
-                        <span className="font-bold text-amber-400">{stg.defectCount} rejections</span>
+                        <span className={`font-bold ${stg.defectCount > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {stg.defectCount} rejections
+                        </span>
                       </div>
                     ))}
                   </div>

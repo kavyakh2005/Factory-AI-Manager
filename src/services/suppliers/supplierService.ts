@@ -3,46 +3,7 @@ import { LocalStorageManager } from '../storage/localDb';
 import { Supplier, CreateSupplierInput } from '../../types';
 import { sanitizeInput } from '../../utils/security';
 
-export const DEFAULT_FACTORY_SUPPLIERS: Supplier[] = [
-  {
-    id: 'sup-1',
-    supplierCode: 'SUP-101',
-    name: 'Surat Fabric Mills Ltd',
-    companyName: 'Surat Fabric Mills',
-    contactPerson: 'Rajesh Shah',
-    phone: '+91 98251 11223',
-    email: 'sales@suratfabric.com',
-    address: 'Pandesara GIDC, Ring Road',
-    city: 'Surat',
-    state: 'Gujarat',
-    gstNumber: '24AAECS4455B1ZX',
-    materialCategory: 'FABRIC',
-    materialsSupplied: ['Cotton Slub', 'Linen Cambric', 'Rayon Twill'],
-    paymentTermsDays: 45,
-    rating: 5,
-    status: 'ACTIVE',
-  },
-  {
-    id: 'sup-2',
-    supplierCode: 'SUP-102',
-    name: 'Apex Trims & Accessories',
-    companyName: 'Apex Buttons & Threads',
-    contactPerson: 'Vikram Mehta',
-    phone: '+91 98334 77889',
-    email: 'apex.trims@gmail.com',
-    address: 'Lower Parel Industrial Area',
-    city: 'Mumbai',
-    state: 'Maharashtra',
-    gstNumber: '27AABCT9988P1ZZ',
-    materialCategory: 'TRIMS',
-    materialsSupplied: ['Buttons', 'Zippers', 'Sewing Threads', 'Interlining'],
-    paymentTermsDays: 30,
-    rating: 4,
-    status: 'ACTIVE',
-  },
-];
-
-let localSuppliersMemory: Supplier[] = LocalStorageManager.getSyncItems<Supplier>('suppliers', DEFAULT_FACTORY_SUPPLIERS);
+let localSuppliersMemory: Supplier[] = LocalStorageManager.getSyncItems<Supplier>('suppliers', []);
 
 export class SupplierService {
   static async getSuppliers(filters?: { search?: string; status?: string; category?: string }): Promise<Supplier[]> {
@@ -92,7 +53,7 @@ export class SupplierService {
     }
 
     if (localSuppliersMemory.length === 0) {
-      const cached = await LocalStorageManager.getCachedItems<Supplier>('suppliers', DEFAULT_FACTORY_SUPPLIERS);
+      const cached = await LocalStorageManager.getCachedItems<Supplier>('suppliers', []);
       localSuppliersMemory = cached;
     }
 
