@@ -264,6 +264,18 @@ export async function apiRequest<T = unknown>(
 
   // 3. Roles
   if (endpoint === '/auth/roles') {
+    const customRolesList: Role[] = [...MOCK_ROLES];
+    try {
+      const storedCustomRoles = JSON.parse(localStorage.getItem('factory_custom_roles') || '[]');
+      if (Array.isArray(storedCustomRoles)) {
+        storedCustomRoles.forEach((cr: any) => {
+          if (!customRolesList.some((r) => r.id === cr.id || r.name === cr.name)) {
+            customRolesList.push(cr);
+          }
+        });
+      }
+    } catch {}
+
     if (isSupabaseConfigured) {
       try {
         const { data, error } = await supabase.from('roles').select('*').order('created_at', { ascending: true });
@@ -280,20 +292,34 @@ export async function apiRequest<T = unknown>(
         console.warn('roles query error:', err);
       }
     }
-    return MOCK_ROLES as unknown as T;
+    return customRolesList as unknown as T;
   }
 
   // 4. Users
   if (endpoint === '/auth/users') {
     if (method === 'POST') {
       const newId = crypto.randomUUID();
-      const roleObj = MOCK_ROLES.find((r) => r.id === body.roleId) || MOCK_ROLES[0];
+      const roleDisplayName = body.roleDisplayName || body.roleTitle || body.roleName || 'Factory Operator';
+      const roleName = (body.roleName || roleDisplayName).toUpperCase().replace(/\s+/g, '_');
+      const allowedModules = body.allowedModules && Array.isArray(body.allowedModules) && body.allowedModules.length > 0
+        ? body.allowedModules
+        : ['DASHBOARD', 'PRODUCTION', 'PRODUCTS', 'SETS_SIZES'];
+
+      const roleObj: Role = {
+        id: `r-${Date.now()}`,
+        name: roleName,
+        displayName: roleDisplayName,
+        allowedModules,
+      };
+
       const newUser: User = {
         id: newId,
-        email: body.email,
-        name: body.name,
+        email: body.email.trim().toLowerCase(),
+        name: body.name.trim(),
         phone: body.phone,
         role: roleObj,
+        allowedModules,
+        status: 'ACTIVE',
       };
 
       // Save to local custom users store for instant login authentication
@@ -301,11 +327,15 @@ export async function apiRequest<T = unknown>(
         const existingUsers = JSON.parse(localStorage.getItem('factory_custom_users') || '[]');
         existingUsers.push({
           id: newId,
-          email: body.email,
-          name: body.name,
+          email: body.email.trim().toLowerCase(),
+          name: body.name.trim(),
           phone: body.phone,
-          roleId: roleObj.name,
+          roleId: roleObj.id,
+          roleName: roleObj.name,
+          roleDisplayName: roleObj.displayName,
+          allowedModules: allowedModules,
           password: body.password || 'Staff@123',
+          status: 'ACTIVE',
         });
         localStorage.setItem('factory_custom_users', JSON.stringify(existingUsers));
       } catch (storageErr) {
@@ -316,10 +346,9 @@ export async function apiRequest<T = unknown>(
         try {
           await supabase.from('profiles').insert({
             id: newId,
-            email: body.email,
-            name: body.name,
+            email: body.email.trim().toLowerCase(),
+            name: body.name.trim(),
             phone: body.phone,
-            role_id: body.roleId && body.roleId.length > 10 ? body.roleId : undefined,
             is_active: true,
           });
 
@@ -327,13 +356,51 @@ export async function apiRequest<T = unknown>(
             action: 'CREATE_USER',
             entity: 'User',
             entity_id: newId,
-            new_value: { name: body.name, email: body.email },
+            new_value: { name: body.name, email: body.email, role: roleDisplayName, permissions: allowedModules },
           });
         } catch (err) {
           console.warn('Supabase profile create error:', err);
         }
       }
       return newUser as unknown as T;
+    }
+
+    if (method === 'PUT') {
+      const updateId = body.id;
+      if (updateId) {
+        try {
+          const existingUsers = JSON.parse(localStorage.getItem('factory_custom_users') || '[]');
+          const idx = existingUsers.findIndex((u: any) => u.id === updateId);
+          if (idx !== -1) {
+            const roleDisplayName = body.roleDisplayName || body.roleTitle || existingUsers[idx].roleDisplayName || 'Staff';
+            const roleName = (body.roleName || roleDisplayName).toUpperCase().replace(/\s+/g, '_');
+            const allowedModules = body.allowedModules || existingUsers[idx].allowedModules || ['DASHBOARD', 'PRODUCTION'];
+
+            existingUsers[idx] = {
+              ...existingUsers[idx],
+              name: body.name !== undefined ? body.name : existingUsers[idx].name,
+              phone: body.phone !== undefined ? body.phone : existingUsers[idx].phone,
+              password: body.password ? body.password : existingUsers[idx].password,
+              roleDisplayName,
+              roleName,
+              allowedModules,
+            };
+            localStorage.setItem('factory_custom_users', JSON.stringify(existingUsers));
+          }
+        } catch {}
+
+        if (isSupabaseConfigured) {
+          try {
+            await supabase.from('profiles').update({
+              name: body.name,
+              phone: body.phone,
+            }).eq('id', updateId);
+          } catch (err) {
+            console.warn('Supabase profile update error:', err);
+          }
+        }
+      }
+      return { success: true } as unknown as T;
     }
 
     if (method === 'DELETE') {
@@ -365,15 +432,42 @@ export async function apiRequest<T = unknown>(
     try {
       const localUsers = JSON.parse(localStorage.getItem('factory_custom_users') || '[]');
       localUsers.forEach((u: any) => {
+        const customRoleTitle = u.roleDisplayName || u.roleTitle || u.roleName || 'Custom Staff';
+        const customModules = u.allowedModules && Array.isArray(u.allowedModules) && u.allowedModules.length > 0
+          ? u.allowedModules
+          : ['DASHBOARD', 'PRODUCTION', 'PRODUCTS', 'SETS_SIZES'];
+
         customUsersList.push({
           id: u.id,
           email: u.email,
           name: u.name,
           phone: u.phone,
-          role: MOCK_ROLES.find((r) => r.name === u.roleId) || MOCK_ROLES[6],
+          role: {
+            id: u.roleId || `r-${u.id}`,
+            name: u.roleName || customRoleTitle.toUpperCase().replace(/\s+/g, '_'),
+            displayName: customRoleTitle,
+            allowedModules: customModules,
+          },
+          allowedModules: customModules,
+          status: 'ACTIVE',
         });
       });
     } catch {}
+
+    const ownerUser: User = {
+      id: 'u-owner-kavya',
+      email: 'kavyakhandelwal57@gmail.com',
+      name: 'Kavya Khandelwal (Owner)',
+      phone: '+91 98200 11223',
+      role: {
+        id: 'r-1',
+        name: 'OWNER',
+        displayName: 'Factory Owner',
+        allowedModules: ['ALL'],
+      },
+      allowedModules: ['ALL'],
+      status: 'ACTIVE',
+    };
 
     if (isSupabaseConfigured) {
       try {
@@ -393,7 +487,7 @@ export async function apiRequest<T = unknown>(
             createdAt: p.created_at,
           }));
           return [
-            { id: 'u-owner-kavya', email: 'kavyakhandelwal57@gmail.com', name: 'Kavya Khandelwal (Owner)', phone: '+91 98200 11223', role: MOCK_ROLES[0] },
+            ownerUser,
             ...dbUsers,
             ...customUsersList.filter((cu) => !dbUsers.some((du: any) => du.email === cu.email)),
           ] as unknown as T;
@@ -405,7 +499,7 @@ export async function apiRequest<T = unknown>(
 
     // Real factory owner account + any custom users created in settings
     return [
-      { id: 'u-owner-kavya', email: 'kavyakhandelwal57@gmail.com', name: 'Kavya Khandelwal (Owner)', phone: '+91 98200 11223', role: MOCK_ROLES[0] },
+      ownerUser,
       ...customUsersList,
     ] as unknown as T;
   }

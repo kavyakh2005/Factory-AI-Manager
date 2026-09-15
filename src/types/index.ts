@@ -1,19 +1,21 @@
 export interface Permission {
   module: string;
   canView: boolean;
-  canCreate: boolean;
-  canEdit: boolean;
-  canDelete: boolean;
-  canApprove: boolean;
-  canExport: boolean;
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canApprove?: boolean;
+  canExport?: boolean;
 }
 
 export interface Role {
   id: string;
-  name: 'OWNER' | 'ADMIN' | 'MANAGER' | 'PRODUCTION_MANAGER' | 'INVENTORY_MANAGER' | 'ACCOUNTANT' | 'STAFF' | string;
+  name: string;
   displayName: string;
   description?: string;
   permissions?: Permission[];
+  allowedModules?: string[];
+  isSystem?: boolean;
 }
 
 export interface User {
@@ -23,6 +25,9 @@ export interface User {
   phone?: string;
   avatar?: string;
   role: Role;
+  allowedModules?: string[];
+  customPermissions?: string[];
+  status?: 'ACTIVE' | 'INACTIVE';
 }
 
 // ==========================================

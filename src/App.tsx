@@ -17,6 +17,7 @@ import { ExpensesPage } from './pages/ExpensesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { AiManagerPage } from './pages/AiManagerPage';
 import { NotificationsPage } from './pages/NotificationsPage';
+import { GuidePage } from './pages/GuidePage';
 
 import { AppLayout } from './components/layout/AppLayout';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
@@ -59,6 +60,16 @@ export const App: React.FC = () => {
           element={
             <ProtectedRoute module="DASHBOARD">
               <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* User Guide & Written SOP Tutorial */}
+        <Route
+          path="guide"
+          element={
+            <ProtectedRoute module="DASHBOARD">
+              <GuidePage />
             </ProtectedRoute>
           }
         />

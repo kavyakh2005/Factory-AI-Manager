@@ -18,6 +18,7 @@ import {
   Settings,
   ShoppingBag,
   Sparkles,
+  BookOpen,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
@@ -46,6 +47,7 @@ const navItems: NavItem[] = [
   { label: 'Reports', path: '/reports', icon: <BarChart3 className="w-4 h-4" />, module: 'REPORTS' },
   { label: 'AI Manager', path: '/ai-manager', icon: <Bot className="w-4 h-4" />, module: 'AI_MANAGER', isAi: true },
   { label: 'Notifications', path: '/notifications', icon: <Bell className="w-4 h-4" />, module: 'DASHBOARD', badge: '3' },
+  { label: 'User Guide & SOP', path: '/guide', icon: <BookOpen className="w-4 h-4 text-amber-400" />, module: 'DASHBOARD' },
   { label: 'Settings', path: '/settings', icon: <Settings className="w-4 h-4" />, module: 'SETTINGS' },
 ];
 

@@ -146,13 +146,34 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
           resetRateLimit(cleanEmail);
 
-          const matchedRole = DEFAULT_ROLES[matched.roleId] || DEFAULT_ROLES.STAFF;
+          const customRoleTitle = matched.roleDisplayName || matched.roleTitle || matched.roleName || matched.roleId || 'Custom Staff';
+          const customModules = matched.allowedModules && Array.isArray(matched.allowedModules) && matched.allowedModules.length > 0
+            ? matched.allowedModules
+            : ['DASHBOARD', 'PRODUCTION', 'PRODUCTS', 'SETS_SIZES'];
+
+          const customRole: Role = {
+            id: matched.roleId || `r-${matched.id}`,
+            name: matched.roleName || customRoleTitle.toUpperCase().replace(/\s+/g, '_'),
+            displayName: customRoleTitle,
+            allowedModules: customModules,
+            permissions: customModules.map((m: string) => ({
+              module: m,
+              canView: true,
+              canCreate: true,
+              canEdit: true,
+              canDelete: true,
+              canApprove: true,
+              canExport: true,
+            })),
+          };
+
           const customUser: User = {
             id: matched.id,
             email: matched.email,
             name: matched.name,
             phone: matched.phone,
-            role: matchedRole,
+            role: customRole,
+            allowedModules: customModules,
           };
 
           const signature = await generateSecuritySignature(customUser as unknown as Record<string, unknown>);
@@ -163,11 +184,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
           logSecurityEvent({
             id: crypto.randomUUID(),
             type: 'LOGIN_SUCCESS',
-            details: `User ${cleanEmail} authenticated successfully as ${matchedRole.name}.`,
+            details: `User ${cleanEmail} authenticated successfully as ${customRole.displayName}.`,
             timestamp: new Date().toISOString(),
           });
 
-          set({ user: customUser, token: `jwt_session_${matched.id}`, isAuthenticated: true, isLoading: false, currentRole: { role: matchedRole.name } });
+          set({ user: customUser, token: `jwt_session_${matched.id}`, isAuthenticated: true, isLoading: false, currentRole: { role: customRole.name } });
           return;
         }
 
@@ -220,11 +241,20 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const isOwner = email === MASTER_OWNER_EMAIL.toLowerCase();
 
       let assignedRole = isOwner ? DEFAULT_ROLES.OWNER : DEFAULT_ROLES.STAFF;
+      let allowedModules: string[] = ['ALL'];
+
       if (!isOwner) {
         const localCustomUsers = JSON.parse(localStorage.getItem('factory_custom_users') || '[]');
         const matched = localCustomUsers.find((u: any) => u.email.toLowerCase() === email);
-        if (matched && matched.roleId) {
-          assignedRole = DEFAULT_ROLES[matched.roleId] || DEFAULT_ROLES.STAFF;
+        if (matched) {
+          const customTitle = matched.roleDisplayName || matched.roleTitle || matched.roleName || 'Factory Operator';
+          allowedModules = matched.allowedModules || ['DASHBOARD', 'PRODUCTION', 'PRODUCTS', 'SETS_SIZES'];
+          assignedRole = {
+            id: matched.roleId || `r-${matched.id}`,
+            name: matched.roleName || customTitle.toUpperCase().replace(/\s+/g, '_'),
+            displayName: customTitle,
+            allowedModules,
+          };
         }
       }
 
@@ -235,6 +265,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         avatar: sessionUser.user_metadata?.avatar_url,
         phone: sessionUser.phone || '+91 98200 11223',
         role: assignedRole,
+        allowedModules,
       };
 
       const signature = await generateSecuritySignature(userObj as unknown as Record<string, unknown>);
@@ -273,30 +304,74 @@ export const useAuthStore = create<AuthState>((set, get) => {
     hasRole: (...roles: string[]) => {
       const user = get().user;
       if (!user) return false;
-      if (user.role.name === 'OWNER') return true;
-      return roles.includes(user.role.name);
+      if (user.role.name === 'OWNER' || user.email.toLowerCase() === MASTER_OWNER_EMAIL.toLowerCase()) return true;
+
+      // Check if user has management permissions if checking management roles
+      const isMgmtCheck = roles.some((r) => ['OWNER', 'ADMIN', 'MANAGER'].includes(r.toUpperCase()));
+      if (isMgmtCheck) {
+        const userModules = (user.role.allowedModules || user.allowedModules || []).map((m) => m.toUpperCase());
+        if (userModules.includes('ALL') || userModules.includes('SETTINGS')) {
+          return true;
+        }
+      }
+
+      return roles.some((r) => 
+        r.toUpperCase() === user.role.name.toUpperCase() || 
+        r.toLowerCase() === user.role.displayName.toLowerCase()
+      );
     },
 
     hasPermission: (module: string, action = 'canView') => {
       const user = get().user;
       if (!user) return false;
-      if (user.role.name === 'OWNER' || user.role.name === 'ADMIN') return true;
-      if (user.role.name === 'MANAGER') return true;
 
+      // Master Owner has unrestricted access to every feature
+      if (user.role.name === 'OWNER' || user.email.toLowerCase() === MASTER_OWNER_EMAIL.toLowerCase()) {
+        return true;
+      }
+
+      const mod = module.toUpperCase();
+      const userModules = (user.role.allowedModules || user.allowedModules || []).map((m) => m.toUpperCase());
+
+      // If owner gave full factory access
+      if (userModules.includes('ALL')) return true;
+
+      // If explicit module is granted by owner
+      if (userModules.includes(mod)) return true;
+
+      // Dashboard & Notifications are accessible if user has at least one assigned module
+      if ((mod === 'DASHBOARD' || mod === 'NOTIFICATIONS') && userModules.length > 0) return true;
+
+      // Detailed permission checks
+      if (user.role.permissions && user.role.permissions.length > 0) {
+        const perm = user.role.permissions.find((p) => p.module.toUpperCase() === mod);
+        if (perm) {
+          if (action === 'canView') return perm.canView;
+          if (action === 'canCreate') return perm.canCreate ?? perm.canView;
+          if (action === 'canEdit') return perm.canEdit ?? perm.canView;
+          if (action === 'canDelete') return perm.canDelete ?? perm.canView;
+          if (action === 'canApprove') return perm.canApprove ?? perm.canView;
+          if (action === 'canExport') return perm.canExport ?? perm.canView;
+        }
+      }
+
+      // Legacy role fallbacks
+      if (user.role.name === 'ADMIN' || user.role.name === 'MANAGER') return true;
       if (user.role.name === 'PRODUCTION_MANAGER') {
-        return ['DASHBOARD', 'PRODUCTION', 'ORDERS', 'INVENTORY', 'PRODUCTS', 'SETS_SIZES', 'REPORTS', 'AI_MANAGER'].includes(module.toUpperCase());
+        return ['DASHBOARD', 'PRODUCTION', 'ORDERS', 'INVENTORY', 'PRODUCTS', 'SETS_SIZES', 'REPORTS', 'AI_MANAGER'].includes(mod);
       }
       if (user.role.name === 'INVENTORY_MANAGER') {
-        return ['DASHBOARD', 'INVENTORY', 'PURCHASES', 'DISPATCH', 'PRODUCTS', 'SETS_SIZES', 'REPORTS', 'AI_MANAGER'].includes(module.toUpperCase());
+        return ['DASHBOARD', 'INVENTORY', 'PURCHASES', 'DISPATCH', 'PRODUCTS', 'SETS_SIZES', 'REPORTS', 'AI_MANAGER'].includes(mod);
       }
       if (user.role.name === 'ACCOUNTANT') {
-        return ['DASHBOARD', 'ORDERS', 'PURCHASES', 'PAYMENTS', 'EXPENSES', 'PRODUCTS', 'SETS_SIZES', 'REPORTS'].includes(module.toUpperCase());
+        return ['DASHBOARD', 'ORDERS', 'PURCHASES', 'PAYMENTS', 'EXPENSES', 'PRODUCTS', 'SETS_SIZES', 'REPORTS'].includes(mod);
       }
       if (user.role.name === 'STAFF') {
-        return ['DASHBOARD', 'PRODUCTION', 'INVENTORY', 'PRODUCTS', 'SETS_SIZES'].includes(module.toUpperCase());
+        return ['DASHBOARD', 'PRODUCTION', 'INVENTORY', 'PRODUCTS', 'SETS_SIZES'].includes(mod);
       }
 
       return false;
     },
   };
 });
+

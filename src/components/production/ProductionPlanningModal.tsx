@@ -134,6 +134,23 @@ export const ProductionPlanningModal: React.FC<ProductionPlanningModalProps> = (
           </div>
         )}
 
+        {/* Missing Catalog Warning Banner */}
+        {(products.length === 0 || sets.length === 0) && (
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-1">
+            <div className="font-bold flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4 text-amber-400" />
+              Catalog Data Needed to Plan Production
+            </div>
+            <p className="text-[11px] text-amber-200/80">
+              {products.length === 0 && sets.length === 0
+                ? 'Aapke catalog mein abhi koi Product Style aur Size Set registered nahi hai. Production plan karne se pehle "Product Master" (/products) mein style aur "Sets & Sizes" (/sets-sizes) mein set create karein.'
+                : products.length === 0
+                ? 'Product Master (/products) mein pehle ek garment style add karein.'
+                : 'Sets & Sizes (/sets-sizes) mein pehle ek size set (jaise Standard 38-46) add karein.'}
+            </p>
+          </div>
+        )}
+
         {/* Source Order Selector */}
         <div className="p-4 rounded-xl bg-factory-950/80 border border-slate-800 space-y-3">
           <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
@@ -170,11 +187,18 @@ export const ProductionPlanningModal: React.FC<ProductionPlanningModalProps> = (
               required
               className="w-full px-3 py-2 rounded-lg bg-factory-950 border border-slate-700 text-slate-100 text-xs focus:border-primary-500 outline-none"
             >
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.code})
-                </option>
-              ))}
+              {products.length === 0 ? (
+                <option value="">⚠️ No Products (Add in /products)</option>
+              ) : (
+                <>
+                  <option value="">Select Product Style...</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.code})
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </div>
 
@@ -188,11 +212,18 @@ export const ProductionPlanningModal: React.FC<ProductionPlanningModalProps> = (
               required
               className="w-full px-3 py-2 rounded-lg bg-factory-950 border border-slate-700 text-slate-100 text-xs focus:border-primary-500 outline-none"
             >
-              {sets.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.code})
-                </option>
-              ))}
+              {sets.length === 0 ? (
+                <option value="">⚠️ No Sets (Add in /sets-sizes)</option>
+              ) : (
+                <>
+                  <option value="">Select Size Set...</option>
+                  {sets.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.code})
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </div>
 
