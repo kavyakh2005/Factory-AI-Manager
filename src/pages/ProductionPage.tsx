@@ -24,6 +24,7 @@ import {
   ArrowRight,
   Sparkles,
   ClipboardList,
+  Trash2,
 } from 'lucide-react';
 
 export const ProductionPage: React.FC = () => {
@@ -76,6 +77,14 @@ export const ProductionPage: React.FC = () => {
   const advanceStageMutation = useMutation({
     mutationFn: ({ orderId, stageId }: { orderId: string; stageId: string }) =>
       ProductionService.advanceStage(orderId, stageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['production-dashboard'] });
+    },
+  });
+
+  // Delete Production Order Mutation
+  const deleteOrderMutation = useMutation({
+    mutationFn: (orderId: string) => ProductionService.deleteProductionOrder(orderId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['production-dashboard'] });
     },
@@ -381,6 +390,21 @@ export const ProductionPage: React.FC = () => {
                             >
                               Log Shift
                             </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm(`Are you sure you want to delete Production Work Order ${order.productionNumber}?`)) {
+                                  deleteOrderMutation.mutate(order.id);
+                                }
+                              }}
+                              className="p-1.5 text-rose-400 hover:text-rose-200 hover:bg-rose-950/50"
+                              title="Delete Work Order"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -439,6 +463,9 @@ export const ProductionPage: React.FC = () => {
         onOpenLogModal={() => {
           setIsDetailsModalOpen(false);
           setIsLogModalOpen(true);
+        }}
+        onDeleteOrder={async (orderId) => {
+          await deleteOrderMutation.mutateAsync(orderId);
         }}
         onStageAdvanced={() => {
           queryClient.invalidateQueries({ queryKey: ['production-dashboard'] });

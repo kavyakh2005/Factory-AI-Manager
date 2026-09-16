@@ -20,6 +20,7 @@ import {
   Sparkles,
   ArrowRightLeft,
   FastForward,
+  Trash2,
 } from 'lucide-react';
 
 interface ProductionDetailsModalProps {
@@ -31,6 +32,7 @@ interface ProductionDetailsModalProps {
   allSets: Set[];
   onOpenLogModal: () => void;
   onStageAdvanced: () => void;
+  onDeleteOrder?: (orderId: string) => Promise<void> | void;
 }
 
 export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
@@ -42,11 +44,14 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
   allSets,
   onOpenLogModal,
   onStageAdvanced,
+  onDeleteOrder,
 }) => {
   if (!productionOrder) return null;
 
   const [isAdvancing, setIsAdvancing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showFastTrackConfirm, setShowFastTrackConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedJumpStageId, setSelectedJumpStageId] = useState<string>('');
 
   const currentSet = (allSets.find((s) => s.id === productionOrder.setId) || productionOrder.set || allSets[0]) as Set;
@@ -237,6 +242,25 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
     }
   };
 
+  // Delete Entire Production Order
+  const handleDeleteProductionOrder = async () => {
+    setIsDeleting(true);
+    try {
+      if (onDeleteOrder) {
+        await onDeleteOrder(productionOrder.id);
+      } else {
+        await ProductionService.deleteProductionOrder(productionOrder.id);
+      }
+      onClose();
+      onStageAdvanced();
+    } catch (err) {
+      console.error('Failed to delete production order:', err);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -246,6 +270,38 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
       maxWidth="4xl"
     >
       <div className="space-y-6">
+        {/* Delete Confirmation Modal Banner */}
+        {showDeleteConfirm && (
+          <div className="p-4 rounded-xl bg-gradient-to-r from-rose-500/20 to-red-500/20 border border-rose-500/40 text-rose-200 space-y-2 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2 font-bold text-sm text-rose-100">
+              <Trash2 className="w-4 h-4 text-rose-400" />
+              <span>Delete Production Order #{productionOrder.productionNumber}?</span>
+            </div>
+            <p className="text-xs text-rose-200/90">
+              Kya aap sach me is production batch ko delete karna chahte hain? Isse associated production entries aur WIP stage logs permanently remove ho jayenge.
+            </p>
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={handleDeleteProductionOrder}
+                isLoading={isDeleting}
+                icon={<Trash2 className="w-3.5 h-3.5" />}
+              >
+                Yes, Delete Work Order
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Fast Track Confirmation Modal Banner */}
         {showFastTrackConfirm && (
           <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 text-amber-200 space-y-2">
@@ -720,6 +776,14 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
               icon={<Printer className="w-4 h-4 text-slate-300" />}
             >
               Print Route Slip
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setShowDeleteConfirm(true)}
+              icon={<Trash2 className="w-4 h-4" />}
+            >
+              Delete Order
             </Button>
           </div>
 
