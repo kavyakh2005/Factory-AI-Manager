@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ProductionOrder, ProductionStage, RejectionReason, Set } from '../../types';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
@@ -7,6 +7,7 @@ import { CheckCircle2, AlertTriangle, User, AlertCircle } from 'lucide-react';
 
 interface LogProductionEntryModalProps {
   productionOrder: ProductionOrder | null;
+  initialStageId?: string;
   isOpen: boolean;
   onClose: () => void;
   stages: ProductionStage[];
@@ -17,6 +18,7 @@ interface LogProductionEntryModalProps {
 
 export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = ({
   productionOrder,
+  initialStageId,
   isOpen,
   onClose,
   stages,
@@ -26,11 +28,11 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
 }) => {
   if (!productionOrder) return null;
 
-  const currentSet = allSets.find((s) => s.id === productionOrder.setId) || productionOrder.set;
+  const currentSet = (allSets.find((s) => s.id === productionOrder.setId) || productionOrder.set || allSets[0]) as Set;
   const availableSizes = currentSet?.setSizes || [];
 
   const [selectedStageId, setSelectedStageId] = useState<string>(
-    productionOrder.currentStageId || stages[0]?.id || ''
+    initialStageId || productionOrder.currentStageId || stages[0]?.id || ''
   );
   const [operatorName, setOperatorName] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
@@ -39,6 +41,19 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
   >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedStageId(initialStageId || productionOrder.currentStageId || stages[0]?.id || '');
+      setEntries({});
+      setErrorMessage(null);
+    }
+  }, [isOpen, initialStageId, productionOrder?.id, productionOrder?.currentStageId]);
+
+  const stageFlow = ProductionService.calculateStageFlow(productionOrder, stages, currentSet);
+  const currentStageFlow = stageFlow.stagesFlow.find(
+    (s) => s.stageId === selectedStageId || s.stageName === selectedStageId
+  );
 
   const handlePassedChange = (sizeId: string, val: string) => {
     const num = Math.max(0, parseInt(val, 10) || 0);
@@ -87,18 +102,32 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
     e.preventDefault();
     setErrorMessage(null);
 
-    // Validate that passed quantities don't exceed remaining target for any size
+    // Validate that passed quantities don't exceed available input pieces for any size
     for (const ss of availableSizes) {
-      const plannedQty = productionOrder.plannedSizes?.[ss.sizeId] || (productionOrder.order?.orderItems?.find((oi) => oi.sizeId === ss.sizeId)?.quantity) || 0;
-      const passedSoFar = (productionOrder.entries || []).filter((e) => e.sizeId === ss.sizeId && (e.stageId === selectedStageId || e.stage?.id === selectedStageId)).reduce((sum, e) => sum + e.quantityPassed, 0);
-      const remaining = Math.max(0, plannedQty - passedSoFar);
+      const sizeBreakdown = currentStageFlow?.sizeBreakdown.find((sb) => sb.sizeId === ss.sizeId);
+      const inputAvailable = sizeBreakdown?.inputAvailable || 0;
+      const stagePassedSoFar = sizeBreakdown?.stagePassed || 0;
+      const maxRemainingToPass = Math.max(0, inputAvailable - stagePassedSoFar);
+      const priorStagePending = sizeBreakdown?.priorStagePending || 0;
       const row = entries[ss.sizeId];
+
       if (row && row.passed > 0) {
-        if (remaining === 0) {
-          setErrorMessage(`Size ${ss.size?.name || ss.sizeId} ka planning target (${plannedQty} pcs) already complete ho chuka hai.`);
+        if (inputAvailable === 0) {
+          setErrorMessage(
+            `Size ${ss.size?.name || ss.sizeId}: Pichle stage se 0 pieces pass huye hain. Pehle pichle stage ka output log karein.`
+          );
           return;
-        } else if (row.passed > remaining) {
-          setErrorMessage(`Size ${ss.size?.name || ss.sizeId} mein passed quantity (${row.passed} pcs) remaining target (${remaining} pcs) se zyada nahi ho sakti.`);
+        } else if (maxRemainingToPass === 0) {
+          setErrorMessage(
+            `Size ${ss.size?.name || ss.sizeId}: Iss stage ka available quota (${inputAvailable} pcs) already complete ho chuka hai.`
+          );
+          return;
+        } else if (row.passed > maxRemainingToPass) {
+          setErrorMessage(
+            `Size ${ss.size?.name || ss.sizeId}: Sirf ${inputAvailable} pieces pichle stage se pass huye hain (${stagePassedSoFar} already logged). Aap ${row.passed} pass nahi kar sakte (Max allowed: ${maxRemainingToPass} pcs). ${
+              priorStagePending > 0 ? `Baki ${priorStagePending} pieces abhi pichle stages par hain.` : ''
+            }`
+          );
           return;
         }
       }
@@ -186,10 +215,10 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
-                Size-Wise Stage Output & Quality Inspection
+                Size-Wise Stage Output & Quality Inspection ({currentStageFlow?.stageName || 'Current Stage'})
               </span>
               <span className="text-[11px] text-slate-400">
-                Track exact pieces planned during order booking vs passed in current manufacturing stage
+                Only pieces passed from prior stages can be logged in this step. Unproduced pieces remain at prior stages.
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs w-full sm:w-auto">
@@ -198,11 +227,13 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
                 onClick={() => {
                   const autoFilled: Record<string, { passed: number; rejected: number; rejectionReason: string }> = {};
                   availableSizes.forEach((ss) => {
-                    const plannedQty = productionOrder.plannedSizes?.[ss.sizeId] || (productionOrder.order?.orderItems?.find((oi) => oi.sizeId === ss.sizeId)?.quantity) || 0;
-                    const passedSoFar = (productionOrder.entries || []).filter((e) => e.sizeId === ss.sizeId && (e.stageId === selectedStageId || e.stage?.id === selectedStageId)).reduce((sum, e) => sum + e.quantityPassed, 0);
-                    const remaining = Math.max(0, plannedQty - passedSoFar);
+                    const sizeBreakdown = currentStageFlow?.sizeBreakdown.find((sb) => sb.sizeId === ss.sizeId);
+                    const inputAvailable = sizeBreakdown?.inputAvailable || 0;
+                    const stagePassedSoFar = sizeBreakdown?.stagePassed || 0;
+                    const maxRemainingToPass = Math.max(0, inputAvailable - stagePassedSoFar);
+
                     autoFilled[ss.sizeId] = {
-                      passed: remaining,
+                      passed: maxRemainingToPass,
                       rejected: 0,
                       rejectionReason: rejectionReasons[0]?.name || 'Fabric Defect / Flaw',
                     };
@@ -211,7 +242,7 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
                 }}
                 className="px-2.5 py-1 rounded-lg bg-primary-600/20 hover:bg-primary-600/30 text-primary-300 border border-primary-500/40 text-[11px] font-semibold transition-all"
               >
-                ⚡ Autofill Remaining Target
+                ⚡ Autofill Available Input
               </button>
               <div className="flex items-center gap-2 text-[11px] ml-auto sm:ml-0">
                 <span className="text-emerald-400 font-bold">Passed: {totalPassedBatch} pcs</span>
@@ -223,10 +254,13 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
           <div className="space-y-3">
             {availableSizes.map((ss) => {
               const row = entries[ss.sizeId] || { passed: 0, rejected: 0, rejectionReason: '' };
-              const plannedQty = productionOrder.plannedSizes?.[ss.sizeId] || (productionOrder.order?.orderItems?.find((oi) => oi.sizeId === ss.sizeId)?.quantity) || 0;
-              const passedSoFar = (productionOrder.entries || []).filter((e) => e.sizeId === ss.sizeId && (e.stageId === selectedStageId || e.stage?.id === selectedStageId)).reduce((sum, e) => sum + e.quantityPassed, 0);
-              const rejectedSoFar = (productionOrder.entries || []).filter((e) => e.sizeId === ss.sizeId && (e.stageId === selectedStageId || e.stage?.id === selectedStageId)).reduce((sum, e) => sum + e.quantityRejected, 0);
-              const remaining = Math.max(0, plannedQty - passedSoFar);
+              const sizeBreakdown = currentStageFlow?.sizeBreakdown.find((sb) => sb.sizeId === ss.sizeId);
+              const totalPlanned = sizeBreakdown?.totalPlanned || 0;
+              const inputAvailable = sizeBreakdown?.inputAvailable || 0;
+              const passedSoFar = sizeBreakdown?.stagePassed || 0;
+              const rejectedSoFar = sizeBreakdown?.stageRejected || 0;
+              const remaining = Math.max(0, inputAvailable - passedSoFar);
+              const priorStagePending = sizeBreakdown?.priorStagePending || 0;
 
               return (
                 <div
@@ -243,10 +277,13 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
 
                     <div className="flex flex-wrap items-center gap-3 text-[11px]">
                       <span className="text-slate-400">
-                        🎯 Planning Target: <strong className="text-slate-100 font-semibold">{plannedQty} pcs</strong>
+                        🎯 Total Planned: <strong className="text-slate-100 font-semibold">{totalPlanned} pcs</strong>
                       </span>
                       <span className="text-slate-400">
-                        ✅ Passed So Far: <strong className="text-emerald-400 font-semibold">{passedSoFar} pcs</strong>
+                        📥 Received from Prior Step: <strong className="text-sky-300 font-semibold">{inputAvailable} pcs</strong>
+                      </span>
+                      <span className="text-slate-400">
+                        ✅ Passed in this Step: <strong className="text-emerald-400 font-semibold">{passedSoFar} pcs</strong>
                       </span>
                       {rejectedSoFar > 0 && (
                         <span className="text-slate-400">
@@ -254,8 +291,13 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
                         </span>
                       )}
                       <span className="text-slate-400">
-                        ⏳ Remaining: <strong className="text-amber-400 font-semibold">{remaining} pcs</strong>
+                        ⏳ Available to Work: <strong className="text-amber-400 font-semibold">{remaining} pcs</strong>
                       </span>
+                      {priorStagePending > 0 && (
+                        <span className="text-slate-500 text-[10px] italic">
+                          ({priorStagePending} pcs waiting at earlier stages)
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -271,7 +313,7 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
                         min="0"
                         max={remaining}
                         disabled={remaining === 0}
-                        placeholder={remaining === 0 ? 'Completed' : '0'}
+                        placeholder={remaining === 0 ? (inputAvailable === 0 ? 'Waiting' : 'Done') : '0'}
                         value={row.passed === 0 ? '' : row.passed}
                         onChange={(e) => handlePassedChange(ss.sizeId, e.target.value)}
                         className={`w-full text-center py-1.5 rounded-lg bg-factory-950 border border-slate-700 text-slate-100 text-xs font-bold focus:outline-none focus:border-emerald-500 ${

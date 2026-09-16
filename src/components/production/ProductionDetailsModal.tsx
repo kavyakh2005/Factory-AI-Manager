@@ -24,6 +24,7 @@ import {
 
 interface ProductionDetailsModalProps {
   productionOrder: ProductionOrder | null;
+  initialStageId?: string;
   isOpen: boolean;
   onClose: () => void;
   stages: ProductionStage[];
@@ -34,6 +35,7 @@ interface ProductionDetailsModalProps {
 
 export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
   productionOrder,
+  initialStageId,
   isOpen,
   onClose,
   stages,
@@ -47,11 +49,35 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
   const [showFastTrackConfirm, setShowFastTrackConfirm] = useState(false);
   const [selectedJumpStageId, setSelectedJumpStageId] = useState<string>('');
 
+  const currentSet = (allSets.find((s) => s.id === productionOrder.setId) || productionOrder.set || allSets[0]) as Set;
   const currentStageIndex = stages.findIndex((s) => s.id === productionOrder.currentStageId || s.name === productionOrder.currentStage?.name);
   const nextStage = currentStageIndex >= 0 && currentStageIndex < stages.length - 1 ? stages[currentStageIndex + 1] : null;
 
-  // Calculate dynamic size-wise breakdown
+  // Calculate dynamic size-wise breakdown and stage flow
   const sizeMatrix = ProductionService.calculateSizeWiseMatrix(productionOrder, allSets);
+  const stageFlow = ProductionService.calculateStageFlow(productionOrder, stages, currentSet);
+
+  const [viewMode, setViewMode] = useState<'STAGE_FLOW' | 'OVERALL'>('STAGE_FLOW');
+  const [selectedViewingStageId, setSelectedViewingStageId] = useState<string>(
+    initialStageId || productionOrder.currentStageId || stages[1]?.id || stages[0]?.id
+  );
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setSelectedViewingStageId(initialStageId || productionOrder.currentStageId || stages[1]?.id || stages[0]?.id);
+      setViewMode('STAGE_FLOW');
+      setShowFastTrackConfirm(false);
+    }
+  }, [isOpen, initialStageId, productionOrder?.id, productionOrder?.currentStageId]);
+
+  const activeViewingStage =
+    stageFlow.stagesFlow.find((s) => s.stageId === selectedViewingStageId || s.stageName === selectedViewingStageId) ||
+    stageFlow.stagesFlow.find((s) => s.stageId === productionOrder.currentStageId) ||
+    stageFlow.stagesFlow[0];
+
+  const handlePrintJobCard = () => {
+    window.print();
+  };
 
   // Totals calculations
   let totalOrdered = 0;
@@ -82,7 +108,6 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
     if (entry.size?.name) return `Size ${entry.size.name}`;
     if (!entry.sizeId) return 'All Sizes';
 
-    const currentSet = allSets.find((s) => s.id === productionOrder.setId) || productionOrder.set;
     const match = currentSet?.setSizes?.find(
       (ss) => ss.sizeId === entry.sizeId || ss.id === entry.sizeId || ss.size?.id === entry.sizeId
     );
@@ -104,6 +129,7 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
     setIsAdvancing(true);
     try {
       await ProductionService.advanceStage(productionOrder.id, targetStageId);
+      setSelectedViewingStageId(targetStageId);
       onStageAdvanced();
     } catch (err) {
       console.error('Failed to move stage:', err);
@@ -118,9 +144,7 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
 
     setIsAdvancing(true);
     try {
-      const currentSet = allSets.find((s) => s.id === productionOrder.setId) || productionOrder.set;
       const availableSizes = currentSet?.setSizes || [];
-      
       let fastTrackEntries: { sizeId: string; quantityPassed: number; quantityRejected: number }[] = [];
       
       if (productionOrder.plannedSizes && Object.keys(productionOrder.plannedSizes).length > 0) {
@@ -128,7 +152,7 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
           .map(([sizeId, qty]) => {
             const planned = Number(qty) || 0;
             const alreadyPassedTotal = (productionOrder.entries || [])
-              .filter((e) => e.sizeId === sizeId)
+              .filter((e) => e.sizeId === sizeId && (e.stageId === readyStage.id || e.stage?.name === 'READY'))
               .reduce((sum, e) => sum + e.quantityPassed, 0);
             const remainingToPass = Math.max(0, planned - alreadyPassedTotal);
             return {
@@ -142,7 +166,7 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
         fastTrackEntries = availableSizes.map((ss) => {
           const planned = (productionOrder.order?.orderItems?.find((oi) => oi.sizeId === ss.sizeId)?.quantity) || 0;
           const alreadyPassedTotal = (productionOrder.entries || [])
-            .filter((e) => e.sizeId === ss.sizeId)
+            .filter((e) => e.sizeId === ss.sizeId && (e.stageId === readyStage.id || e.stage?.name === 'READY'))
             .reduce((sum, e) => sum + e.quantityPassed, 0);
           const remainingToPass = Math.max(0, planned - alreadyPassedTotal);
           return {
@@ -179,40 +203,18 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
     if (!nextStage) return;
     setIsAdvancing(true);
     try {
-      const currentSet = allSets.find((s) => s.id === productionOrder.setId) || productionOrder.set;
-      const availableSizes = currentSet?.setSizes || [];
-      
+      const currentStageFlowObj = stageFlow.stagesFlow.find((s) => s.stageId === productionOrder.currentStageId);
       let stageEntries: { sizeId: string; quantityPassed: number; quantityRejected: number }[] = [];
       
-      // Calculate ONLY remaining unpassed pieces for the current stage!
-      if (productionOrder.plannedSizes && Object.keys(productionOrder.plannedSizes).length > 0) {
-        stageEntries = Object.entries(productionOrder.plannedSizes)
-          .map(([sizeId, qty]) => {
-            const planned = Number(qty) || 0;
-            const alreadyPassedInStage = (productionOrder.entries || [])
-              .filter((e) => e.sizeId === sizeId && (e.stageId === productionOrder.currentStageId || e.stage?.id === productionOrder.currentStageId))
-              .reduce((sum, e) => sum + e.quantityPassed, 0);
-            const remainingToPass = Math.max(0, planned - alreadyPassedInStage);
-            return {
-              sizeId,
-              quantityPassed: remainingToPass,
-              quantityRejected: 0,
-            };
-          })
-          .filter((e) => e.quantityPassed > 0);
-      } else {
-        stageEntries = availableSizes.map((ss) => {
-          const planned = (productionOrder.order?.orderItems?.find((oi) => oi.sizeId === ss.sizeId)?.quantity) || 0;
-          const alreadyPassedInStage = (productionOrder.entries || [])
-            .filter((e) => e.sizeId === ss.sizeId && (e.stageId === productionOrder.currentStageId || e.stage?.id === productionOrder.currentStageId))
-            .reduce((sum, e) => sum + e.quantityPassed, 0);
-          const remainingToPass = Math.max(0, planned - alreadyPassedInStage);
-          return {
-            sizeId: ss.sizeId,
-            quantityPassed: remainingToPass,
+      // Complete only remaining pieces that actually reached the current stage!
+      if (currentStageFlowObj) {
+        stageEntries = currentStageFlowObj.sizeBreakdown
+          .map((sb) => ({
+            sizeId: sb.sizeId,
+            quantityPassed: sb.stageRemaining,
             quantityRejected: 0,
-          };
-        }).filter((e) => e.quantityPassed > 0);
+          }))
+          .filter((e) => e.quantityPassed > 0);
       }
 
       if (stageEntries.length > 0) {
@@ -221,21 +223,18 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
           stageId: productionOrder.currentStageId,
           entries: stageEntries,
           operatorName: 'Supervisor Approval',
-          notes: `Stage ${productionOrder.currentStage?.name} completed`,
+          notes: `Stage ${productionOrder.currentStage?.name} completed and advanced to ${nextStage.name}`,
         });
       }
 
       await ProductionService.advanceStage(productionOrder.id, nextStage.id);
+      setSelectedViewingStageId(nextStage.id);
       onStageAdvanced();
     } catch (err) {
       console.error('Failed to complete stage:', err);
     } finally {
       setIsAdvancing(false);
     }
-  };
-
-  const handlePrintJobCard = () => {
-    window.print();
   };
 
   return (
@@ -284,7 +283,7 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-lg font-black text-slate-100 font-mono">{productionOrder.productionNumber}</span>
               <Badge variant={isCompleted ? 'success' : 'primary'}>
-                {productionOrder.currentStage?.name || 'PLANNING'}
+                Floor: {productionOrder.currentStage?.name || 'PLANNING'}
               </Badge>
               {isDelayed && (
                 <Badge variant="danger" size="sm">
@@ -334,28 +333,27 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
           </div>
         </div>
 
-        {/* Visual 7-Stage Workflow Progress Stepper (Interactive Jump / Skip) */}
+        {/* Visual 7-Stage Workflow Progress Stepper (Interactive Jump / Skip / View) */}
         <div className="p-4 rounded-xl bg-factory-950 border border-slate-800 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
-                Manufacturing Pipeline Progression
+                Manufacturing Pipeline & WIP Flow
               </span>
               <span className="text-[11px] text-slate-400">
-                Click on any stage below to directly jump or skip intermediate steps
+                Click any stage card below to inspect its exact piece flow or shift active manufacturing
               </span>
             </div>
 
             {/* Direct Stage Jump Dropdown */}
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
-                <ArrowRightLeft className="w-3 h-3 text-primary-400" /> Jump to:
+                <ArrowRightLeft className="w-3 h-3 text-primary-400" /> Active Stage:
               </span>
               <select
-                value={selectedJumpStageId || productionOrder.currentStageId}
+                value={productionOrder.currentStageId}
                 onChange={(e) => {
                   const targetId = e.target.value;
-                  setSelectedJumpStageId(targetId);
                   handleStageMove(targetId);
                 }}
                 disabled={isAdvancing}
@@ -363,7 +361,7 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
               >
                 {stages.map((st) => (
                   <option key={st.id} value={st.id}>
-                    Step {st.sequence}: {st.name} {st.id === productionOrder.currentStageId ? '(Current)' : ''}
+                    Step {st.sequence}: {st.name} {st.id === productionOrder.currentStageId ? '(Current Floor)' : ''}
                   </option>
                 ))}
               </select>
@@ -372,36 +370,60 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
 
           {/* Interactive Stepper Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 pt-1">
-            {stages.map((st, idx) => {
-              const isPast = idx < currentStageIndex;
-              const isCurrent = idx === currentStageIndex;
-              const isFuture = idx > currentStageIndex;
+            {stageFlow.stagesFlow.map((flow) => {
+              const isCurrentActive = flow.stageId === productionOrder.currentStageId;
+              const isViewing = flow.stageId === activeViewingStage?.stageId;
+              const isFullyDone = flow.status === 'COMPLETED';
+              const isInProgress = flow.status === 'IN_PROGRESS';
+              const isWaiting = flow.status === 'WAITING';
 
               return (
                 <button
-                  key={st.id}
+                  key={flow.stageId}
                   type="button"
-                  onClick={() => handleStageMove(st.id)}
-                  disabled={isAdvancing || isCurrent}
-                  title={`Click to shift batch directly to Step ${st.sequence}: ${st.name}`}
-                  className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer group relative text-left sm:text-center ${
-                    isCurrent
-                      ? 'bg-primary-950/70 border-primary-500 shadow-lg shadow-primary-500/20 ring-1 ring-primary-500/50'
-                      : isPast
+                  onClick={() => setSelectedViewingStageId(flow.stageId)}
+                  title={`Click to view Step ${flow.sequence}: ${flow.stageName} size breakdown`}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer group relative flex flex-col justify-between min-h-[90px] ${
+                    isViewing
+                      ? 'ring-2 ring-primary-400 border-primary-500 bg-primary-950/70 shadow-lg shadow-primary-500/20'
+                      : isCurrentActive
+                      ? 'bg-indigo-950/40 border-indigo-500/60'
+                      : isFullyDone
                       ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/40 hover:border-emerald-400'
+                      : isInProgress
+                      ? 'bg-amber-950/30 border-amber-500/40 text-amber-300 hover:bg-amber-900/40 hover:border-amber-400'
                       : 'bg-factory-900/50 border-slate-800 text-slate-400 hover:bg-slate-800/80 hover:border-slate-600 hover:text-slate-200'
                   }`}
                 >
-                  <div className="text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center justify-between sm:justify-center">
-                    <span>Step {st.sequence}</span>
-                    {isPast && <CheckCircle2 className="w-3 h-3 text-emerald-400 inline ml-1" />}
-                    {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-ping inline ml-1" />}
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
+                      <span className="text-slate-300">Step {flow.sequence}</span>
+                      {isFullyDone && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
+                      {isInProgress && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />}
+                      {isCurrentActive && !isFullyDone && !isInProgress && (
+                        <span className="w-2 h-2 rounded-full bg-primary-400" />
+                      )}
+                    </div>
+                    <div className={`text-xs font-black truncate ${isViewing ? 'text-primary-200' : isFullyDone ? 'text-emerald-400' : isCurrentActive ? 'text-indigo-200' : 'text-slate-200'}`}>
+                      {flow.stageName}
+                    </div>
                   </div>
-                  <div className={`text-xs font-black truncate ${isCurrent ? 'text-primary-300' : isPast ? 'text-emerald-400' : 'text-slate-300'}`}>
-                    {st.name}
-                  </div>
-                  <div className="text-[9px] mt-1 text-slate-400">
-                    {isCurrent ? '● Active' : isPast ? '✓ Completed' : '→ Click to Shift'}
+
+                  <div className="pt-2 border-t border-slate-800/50 mt-1">
+                    {flow.stageName === 'PLANNING' ? (
+                      <div className="text-[10px] text-emerald-400 font-bold">✓ {flow.inputAvailable} pcs</div>
+                    ) : isFullyDone ? (
+                      <div className="text-[10px] text-emerald-400 font-bold">✓ {flow.totalPassed}/{flow.inputAvailable} pcs</div>
+                    ) : isInProgress ? (
+                      <div>
+                        <div className="text-[10px] text-amber-300 font-bold">{flow.totalPassed}/{flow.inputAvailable} Done</div>
+                        <div className="text-[9px] text-amber-400/80">{flow.remainingInStage} pcs pending</div>
+                      </div>
+                    ) : flow.inputAvailable > 0 ? (
+                      <div className="text-[10px] text-sky-300 font-semibold">{flow.inputAvailable} pcs ready</div>
+                    ) : (
+                      <div className="text-[9px] text-slate-400 italic">Waiting...</div>
+                    )}
                   </div>
                 </button>
               );
@@ -410,8 +432,18 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
 
           {/* Quick Stage Progression Controls */}
           <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
-            <div className="text-[11px] text-slate-400">
-              Current Floor Stage: <strong className="text-primary-300">{productionOrder.currentStage?.name}</strong>
+            <div className="text-[11px] text-slate-300 flex items-center gap-2">
+              <span>Current Floor Stage: <strong className="text-primary-300 font-bold">{productionOrder.currentStage?.name}</strong></span>
+              {activeViewingStage && activeViewingStage.stageId !== productionOrder.currentStageId && (
+                <button
+                  type="button"
+                  onClick={() => handleStageMove(activeViewingStage.stageId)}
+                  disabled={isAdvancing}
+                  className="px-2 py-0.5 rounded bg-primary-600/20 text-primary-300 border border-primary-500/40 text-[10px] font-bold hover:bg-primary-600/40"
+                >
+                  ⚡ Shift Floor to {activeViewingStage.stageName}
+                </button>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -454,60 +486,169 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
 
         {/* Size-Wise Production Tracking Matrix */}
         <div className="p-4 rounded-xl bg-factory-950 border border-slate-800 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-primary-400" />
               <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                Size-Wise Production Breakdown ({productionOrder.set?.name || 'Standard Set'})
+                {viewMode === 'STAGE_FLOW'
+                  ? `Stage WIP Breakdown — Step ${activeViewingStage?.sequence}: ${activeViewingStage?.stageName}`
+                  : `Master Batch Matrix — ${productionOrder.set?.name || 'Standard Set'}`}
               </span>
             </div>
-            <span className="text-xs text-slate-400">
-              Good Qty = Produced - Rejected
-            </span>
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center p-1 bg-factory-900 border border-slate-700/80 rounded-xl text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('STAGE_FLOW')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                  viewMode === 'STAGE_FLOW'
+                    ? 'bg-primary-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                📍 Stage WIP Flow ({activeViewingStage?.stageName})
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('OVERALL')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                  viewMode === 'OVERALL'
+                    ? 'bg-primary-600 text-white shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                📊 Overall Batch Totals
+              </button>
+            </div>
           </div>
 
+          {viewMode === 'STAGE_FLOW' && activeViewingStage && (
+            <div className="p-3 rounded-xl bg-sky-950/20 border border-sky-500/30 text-xs text-sky-200 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <strong>Piece Movement Rule:</strong> Only pieces produced in previous stages can be worked in <strong>Step {activeViewingStage.sequence}: {activeViewingStage.stageName}</strong>. Unproduced pieces remain at their respective stages.
+              </div>
+              <div className="text-[11px] font-semibold text-slate-300">
+                Stage Received: <strong className="text-sky-300">{activeViewingStage.inputAvailable} pcs</strong> | Passed: <strong className="text-emerald-400">{activeViewingStage.totalPassed} pcs</strong> | Pending at this Step: <strong className="text-amber-400">{activeViewingStage.remainingInStage} pcs</strong>
+              </div>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-factory-900 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
-                <tr>
-                  <th className="p-3">Size</th>
-                  <th className="p-3 text-center">Ordered</th>
-                  <th className="p-3 text-center">Planned</th>
-                  <th className="p-3 text-center">Produced</th>
-                  <th className="p-3 text-center text-rose-400">Rejected</th>
-                  <th className="p-3 text-center text-emerald-400">Good Pcs</th>
-                  <th className="p-3 text-center text-amber-400">Remaining</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 font-medium">
-                {sizeMatrix.map((row) => (
-                  <tr key={row.sizeId} className="hover:bg-factory-900/40">
-                    <td className="p-3 font-bold text-slate-100">
-                      Size {row.sizeName}
-                    </td>
-                    <td className="p-3 text-center text-slate-400">{row.orderedQuantity}</td>
-                    <td className="p-3 text-center font-semibold text-slate-200">{row.plannedQuantity}</td>
-                    <td className="p-3 text-center font-bold text-slate-100">{row.producedQuantity}</td>
-                    <td className="p-3 text-center font-bold text-rose-400">
-                      {row.rejectedQuantity > 0 ? `-${row.rejectedQuantity}` : '0'}
-                    </td>
-                    <td className="p-3 text-center font-bold text-emerald-400">{row.goodQuantity}</td>
-                    <td className="p-3 text-center font-bold text-amber-400">{row.remainingQuantity}</td>
+            {viewMode === 'STAGE_FLOW' && activeViewingStage ? (
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-factory-900 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                  <tr>
+                    <th className="p-3">Size</th>
+                    <th className="p-3 text-center">Total Planned</th>
+                    <th className="p-3 text-center text-sky-300">Input from Prior Step</th>
+                    <th className="p-3 text-center text-emerald-400">Passed in this Step</th>
+                    <th className="p-3 text-center text-rose-400">Rejected</th>
+                    <th className="p-3 text-center text-amber-400">Pending at this Step</th>
+                    <th className="p-3 text-center text-slate-400">Prior Stage Pending</th>
+                    <th className="p-3 text-center">Status</th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-factory-900/90 font-black text-xs border-t border-slate-700">
-                <tr>
-                  <td className="p-3 text-slate-200 uppercase">Total (All Sizes)</td>
-                  <td className="p-3 text-center text-slate-400">{totalOrdered}</td>
-                  <td className="p-3 text-center text-slate-200">{totalPlanned}</td>
-                  <td className="p-3 text-center text-slate-100">{totalProduced}</td>
-                  <td className="p-3 text-center text-rose-400">-{totalRejected}</td>
-                  <td className="p-3 text-center text-emerald-400">{totalGood}</td>
-                  <td className="p-3 text-center text-amber-400">{totalRemaining}</td>
-                </tr>
-              </tfoot>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-medium">
+                  {activeViewingStage.sizeBreakdown.map((row) => (
+                    <tr key={row.sizeId} className="hover:bg-factory-900/40">
+                      <td className="p-3 font-bold text-slate-100">
+                        Size {row.sizeName}
+                      </td>
+                      <td className="p-3 text-center text-slate-300">{row.totalPlanned}</td>
+                      <td className="p-3 text-center font-bold text-sky-300">{row.inputAvailable}</td>
+                      <td className="p-3 text-center font-bold text-emerald-400">{row.stagePassed}</td>
+                      <td className="p-3 text-center font-bold text-rose-400">
+                        {row.stageRejected > 0 ? `-${row.stageRejected}` : '0'}
+                      </td>
+                      <td className="p-3 text-center font-bold text-amber-400">{row.stageRemaining}</td>
+                      <td className="p-3 text-center text-slate-400">
+                        {row.priorStagePending > 0 ? (
+                          <span className="text-amber-400/80 font-semibold">{row.priorStagePending} pcs</span>
+                        ) : (
+                          <span className="text-emerald-400 font-semibold">0</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-center">
+                        {row.stageRemaining === 0 && row.stagePassed >= row.totalPlanned ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                            ✓ Complete
+                          </span>
+                        ) : row.stageRemaining > 0 ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                            {row.stageRemaining} pcs WIP
+                          </span>
+                        ) : row.inputAvailable === 0 ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                            Waiting
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/10 text-sky-300 border border-sky-500/30">
+                            In Flow
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-factory-900/90 font-black text-xs border-t border-slate-700">
+                  <tr>
+                    <td className="p-3 text-slate-200 uppercase">Stage Total ({activeViewingStage.stageName})</td>
+                    <td className="p-3 text-center text-slate-200">{totalPlanned}</td>
+                    <td className="p-3 text-center text-sky-300">{activeViewingStage.inputAvailable}</td>
+                    <td className="p-3 text-center text-emerald-400">{activeViewingStage.totalPassed}</td>
+                    <td className="p-3 text-center text-rose-400">-{activeViewingStage.totalRejected}</td>
+                    <td className="p-3 text-center text-amber-400">{activeViewingStage.remainingInStage}</td>
+                    <td className="p-3 text-center text-slate-400">{activeViewingStage.priorStagePending}</td>
+                    <td className="p-3 text-center text-primary-400 font-bold">
+                      {activeViewingStage.status}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            ) : (
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-factory-900 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                  <tr>
+                    <th className="p-3">Size</th>
+                    <th className="p-3 text-center">Ordered</th>
+                    <th className="p-3 text-center">Planned</th>
+                    <th className="p-3 text-center">Produced</th>
+                    <th className="p-3 text-center text-rose-400">Rejected</th>
+                    <th className="p-3 text-center text-emerald-400">Good Pcs</th>
+                    <th className="p-3 text-center text-amber-400">Remaining</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-medium">
+                  {sizeMatrix.map((row) => (
+                    <tr key={row.sizeId} className="hover:bg-factory-900/40">
+                      <td className="p-3 font-bold text-slate-100">
+                        Size {row.sizeName}
+                      </td>
+                      <td className="p-3 text-center text-slate-400">{row.orderedQuantity}</td>
+                      <td className="p-3 text-center font-semibold text-slate-200">{row.plannedQuantity}</td>
+                      <td className="p-3 text-center font-bold text-slate-100">{row.producedQuantity}</td>
+                      <td className="p-3 text-center font-bold text-rose-400">
+                        {row.rejectedQuantity > 0 ? `-${row.rejectedQuantity}` : '0'}
+                      </td>
+                      <td className="p-3 text-center font-bold text-emerald-400">{row.goodQuantity}</td>
+                      <td className="p-3 text-center font-bold text-amber-400">{row.remainingQuantity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-factory-900/90 font-black text-xs border-t border-slate-700">
+                  <tr>
+                    <td className="p-3 text-slate-200 uppercase">Total (All Sizes)</td>
+                    <td className="p-3 text-center text-slate-400">{totalOrdered}</td>
+                    <td className="p-3 text-center text-slate-200">{totalPlanned}</td>
+                    <td className="p-3 text-center text-slate-100">{totalProduced}</td>
+                    <td className="p-3 text-center text-rose-400">-{totalRejected}</td>
+                    <td className="p-3 text-center text-emerald-400">{totalGood}</td>
+                    <td className="p-3 text-center text-amber-400">{totalRemaining}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
           </div>
         </div>
 

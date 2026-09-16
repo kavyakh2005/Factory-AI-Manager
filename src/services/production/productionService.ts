@@ -38,7 +38,18 @@ export const DEFAULT_REJECTION_REASONS: RejectionReason[] = [
   { id: 'rej-9', name: 'Other Defect', code: 'REJ-OTH-09', category: 'GENERAL', description: 'Uncategorized factory floor fault', sortOrder: 9, isActive: true },
 ];
 
-let localProductionOrders: ProductionOrder[] = LocalStorageManager.getSyncItems<ProductionOrder>('production_orders', []);
+let localProductionOrders: ProductionOrder[] = (() => {
+  const syncItems = LocalStorageManager.getSyncItems<ProductionOrder>('production_orders', []);
+  if (syncItems && syncItems.length > 0) return syncItems;
+  try {
+    const raw = localStorage.getItem('factory_production_orders');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return [];
+})();
 
 export class ProductionService {
   // 1. Fetch Stages
@@ -143,100 +154,16 @@ export class ProductionService {
     return DEFAULT_REJECTION_REASONS;
   }
 
-  // 3. Fetch Production Orders with full details and Size-Wise tracking
-  static async getProductionOrders(filters?: { status?: string; stageId?: string; search?: string }): Promise<ProductionOrder[]> {
-    const stages = await this.getStages();
-    const products = await OrderService.getProducts();
-    const sets = await OrderService.getSetsWithSizes();
-    const orders = await OrderService.getOrders();
-
-    if (isSupabaseConfigured) {
-      try {
-        let query = supabase
-          .from('production_orders')
-          .select('*, orders(*, customers(*)), products(*), sets(*), production_stages(*), production_entries(*, sizes(*), production_stages(*))')
-          .order('created_at', { ascending: false });
-
-        if (filters?.status && filters.status !== 'ALL') {
-          query = query.eq('status', filters.status);
-        }
-        if (filters?.stageId && filters?.stageId !== 'ALL') {
-          query = query.eq('current_stage_id', filters.stageId);
-        }
-
-        const { data, error } = await query;
-
-        if (!error && data && data.length > 0) {
-          const mapped: ProductionOrder[] = data.map((po) => ({
-            id: po.id,
-            productionNumber: po.production_number,
-            orderId: po.order_id,
-            order: po.orders ? {
-              ...po.orders,
-              orderNumber: po.orders.order_number,
-              customer: po.orders.customers,
-            } : undefined,
-            productId: po.product_id,
-            product: po.products,
-            variantId: po.variant_id,
-            setId: po.set_id,
-            set: po.sets,
-            currentStageId: po.current_stage_id,
-            currentStage: po.production_stages ? {
-              id: po.production_stages.id,
-              name: po.production_stages.name,
-              sequence: po.production_stages.sequence,
-              colorCode: po.production_stages.color_code,
-              description: po.production_stages.description,
-              isSystem: po.production_stages.is_system,
-              status: po.production_stages.status,
-            } : stages.find((s) => s.id === po.current_stage_id),
-            totalPlannedQty: po.total_planned_qty,
-            totalCompletedQty: po.total_completed_qty || 0,
-            totalRejectedQty: po.total_rejected_qty || 0,
-            startDate: po.start_date,
-            targetCompletionDate: po.target_completion_date,
-            actualCompletionDate: po.actual_completion_date,
-            status: po.status,
-            assignedTeam: po.assigned_team,
-            notes: po.notes,
-            createdAt: po.created_at,
-            updatedAt: po.updated_at,
-            entries: po.production_entries?.map((e: any) => ({
-              id: e.id,
-              productionOrderId: e.production_order_id,
-              stageId: e.stage_id,
-              stage: e.production_stages,
-              sizeId: e.size_id,
-              size: e.sizes,
-              quantityPassed: e.quantity_passed,
-              quantityRejected: e.quantity_rejected,
-              rejectionReason: e.rejection_reason,
-              operatorName: e.operator_name,
-              entryDate: e.entry_date,
-              notes: e.notes,
-            })),
-          }));
-
-          localProductionOrders = mapped;
-          try {
-            localStorage.setItem('factory_production_orders', JSON.stringify(mapped));
-          } catch {}
-
-          return mapped;
-        }
-      } catch (err) {
-        console.warn('Supabase production order query failed, using local cache:', err);
-      }
-    }
-
-    if (localProductionOrders.length === 0) {
-      const cached = await LocalStorageManager.getCachedItems<ProductionOrder>('production_orders', []);
-      localProductionOrders = cached;
-    }
-
-    // Local / In-memory Fallback
-    let result = localProductionOrders.map((po) => {
+  // Helper to enrich production orders with foreign relations and filter
+  private static enrichProductionOrders(
+    ordersList: ProductionOrder[],
+    products: any[],
+    sets: any[],
+    orders: any[],
+    stages: ProductionStage[],
+    filters?: { status?: string; stageId?: string; search?: string }
+  ): ProductionOrder[] {
+    let result = ordersList.map((po) => {
       const ord = orders.find((o) => o.id === po.orderId) || po.order;
       const prd = products.find((p) => p.id === po.productId) || po.product;
       const setObj = sets.find((s) => s.id === po.setId) || po.set;
@@ -245,7 +172,7 @@ export class ProductionService {
       const entriesWithSizes = po.entries?.map((e) => {
         if (e.size?.name) return e;
         const sizeMatch = setObj?.setSizes?.find(
-          (ss) => ss.sizeId === e.sizeId || ss.id === e.sizeId || ss.size?.id === e.sizeId
+          (ss: any) => ss.sizeId === e.sizeId || ss.id === e.sizeId || ss.size?.id === e.sizeId
         )?.size;
         return {
           ...e,
@@ -281,6 +208,146 @@ export class ProductionService {
     }
 
     return result;
+  }
+
+  // 3. Fetch Production Orders with full details and Size-Wise tracking
+  static async getProductionOrders(filters?: { status?: string; stageId?: string; search?: string }): Promise<ProductionOrder[]> {
+    const stages = await this.getStages();
+    const products = await OrderService.getProducts();
+    const sets = await OrderService.getSetsWithSizes();
+    const orders = await OrderService.getOrders();
+
+    if (localProductionOrders.length === 0) {
+      const cached = await LocalStorageManager.getCachedItems<ProductionOrder>('production_orders', []);
+      if (cached && cached.length > 0) {
+        localProductionOrders = cached;
+      } else {
+        try {
+          const raw = localStorage.getItem('factory_production_orders');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              localProductionOrders = parsed;
+            }
+          }
+        } catch {}
+      }
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        let query = supabase
+          .from('production_orders')
+          .select('*, orders(*, customers(*)), products(*), sets(*), production_stages(*), production_entries(*, sizes(*), production_stages(*))')
+          .order('created_at', { ascending: false });
+
+        if (filters?.status && filters.status !== 'ALL') {
+          query = query.eq('status', filters.status);
+        }
+        if (filters?.stageId && filters?.stageId !== 'ALL') {
+          query = query.eq('current_stage_id', filters.stageId);
+        }
+
+        const { data, error } = await query;
+
+        if (!error && data) {
+          const mapped: ProductionOrder[] = data.map((po) => {
+            let parsedPlannedSizes: Record<string, number> | undefined;
+            let cleanNotes = po.notes;
+            if (po.notes && po.notes.includes('[PLAN_SIZES:')) {
+              try {
+                const match = po.notes.match(/\[PLAN_SIZES:(.+?)\]/);
+                if (match && match[1]) {
+                  parsedPlannedSizes = JSON.parse(match[1]);
+                  cleanNotes = po.notes.replace(/\[PLAN_SIZES:.+?\]\s*/, '').trim();
+                }
+              } catch {}
+            }
+
+            return {
+              id: po.id,
+              productionNumber: po.production_number,
+              batchType: po.batch_type || (po.order_id ? 'REPLENISHMENT' : 'READY_STOCK'),
+              orderId: po.order_id,
+              order: po.orders ? {
+                ...po.orders,
+                orderNumber: po.orders.order_number,
+                customer: po.orders.customers,
+              } : undefined,
+              productId: po.product_id,
+              product: po.products,
+              variantId: po.variant_id,
+              setId: po.set_id,
+              set: po.sets,
+              currentStageId: po.current_stage_id,
+              currentStage: po.production_stages ? {
+                id: po.production_stages.id,
+                name: po.production_stages.name,
+                sequence: po.production_stages.sequence,
+                colorCode: po.production_stages.color_code,
+                description: po.production_stages.description,
+                isSystem: po.production_stages.is_system,
+                status: po.production_stages.status,
+              } : stages.find((s) => s.id === po.current_stage_id),
+              totalPlannedQty: po.total_planned_qty,
+              totalCompletedQty: po.total_completed_qty || 0,
+              totalRejectedQty: po.total_rejected_qty || 0,
+              startDate: po.start_date,
+              targetCompletionDate: po.target_completion_date,
+              actualCompletionDate: po.actual_completion_date,
+              status: po.status,
+              assignedTeam: po.assigned_team,
+              notes: cleanNotes,
+              plannedSizes: parsedPlannedSizes,
+              createdAt: po.created_at,
+              updatedAt: po.updated_at,
+              entries: po.production_entries?.map((e: any) => ({
+                id: e.id,
+                productionOrderId: e.production_order_id,
+                stageId: e.stage_id,
+                stage: e.production_stages,
+                sizeId: e.size_id,
+                size: e.sizes,
+                quantityPassed: e.quantity_passed,
+                quantityRejected: e.quantity_rejected,
+                rejectionReason: e.rejection_reason,
+                operatorName: e.operator_name,
+                entryDate: e.entry_date,
+                notes: e.notes,
+              })),
+            };
+          });
+
+          // Merge remote records with any local/cached records that haven't synced yet or exist locally
+          const merged: ProductionOrder[] = [...mapped];
+          localProductionOrders.forEach((lpo) => {
+            const existingIdx = merged.findIndex((m) => m.id === lpo.id || (lpo.productionNumber && m.productionNumber === lpo.productionNumber));
+            if (existingIdx === -1) {
+              merged.push(lpo);
+            } else {
+              if (!merged[existingIdx].plannedSizes && lpo.plannedSizes) {
+                merged[existingIdx].plannedSizes = lpo.plannedSizes;
+              }
+              if ((!merged[existingIdx].entries || merged[existingIdx].entries.length === 0) && lpo.entries && lpo.entries.length > 0) {
+                merged[existingIdx].entries = lpo.entries;
+              }
+            }
+          });
+
+          localProductionOrders = merged;
+          await LocalStorageManager.cacheItems('production_orders', merged);
+          try {
+            localStorage.setItem('factory_production_orders', JSON.stringify(merged));
+          } catch {}
+
+          return this.enrichProductionOrders(merged, products, sets, orders, stages, filters);
+        }
+      } catch (err) {
+        console.warn('Supabase production order query failed, using local cache:', err);
+      }
+    }
+
+    return this.enrichProductionOrders(localProductionOrders, products, sets, orders, stages, filters);
   }
 
   // 4. Calculate Size-Wise Breakdown for a Batch
@@ -340,6 +407,154 @@ export class ProductionService {
 
     if (!setObj) return [];
     return this.calculateSizeWiseBreakdown(productionOrder, setObj);
+  }
+
+  // 4b. Calculate Exact Stage-Wise Piece Flow (WIP per stage and size)
+  static calculateStageFlow(
+    productionOrder: ProductionOrder,
+    allStages: ProductionStage[],
+    setWithSizes: GarmentSet
+  ): {
+    stagesFlow: Array<{
+      stageId: string;
+      stageName: string;
+      sequence: number;
+      inputAvailable: number;
+      totalPassed: number;
+      totalRejected: number;
+      remainingInStage: number;
+      priorStagePending: number;
+      status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'WAITING';
+      sizeBreakdown: Array<{
+        sizeId: string;
+        sizeName: string;
+        sequence: number;
+        totalPlanned: number;
+        inputAvailable: number;
+        stagePassed: number;
+        stageRejected: number;
+        stageGood: number;
+        stageRemaining: number;
+        priorStagePending: number;
+      }>;
+    }>;
+  } {
+    const sortedStages = [...allStages].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    const plannedSizesMap = productionOrder.plannedSizes || {};
+    const entries = productionOrder.entries || [];
+    const sizes = setWithSizes?.setSizes || [];
+
+    // Track output passed for each size from previous stage
+    const previousStagePassedMap: Record<string, number> = {};
+
+    // Initialize with planned sizes
+    sizes.forEach((ss) => {
+      const sizeId = ss.sizeId;
+      const orderedQty = productionOrder.order?.orderItems?.find((oi) => oi.sizeId === sizeId)?.quantity || 0;
+      const plannedQty = plannedSizesMap[sizeId] !== undefined ? plannedSizesMap[sizeId] : orderedQty;
+      previousStagePassedMap[sizeId] = plannedQty;
+    });
+
+    const stagesFlow = sortedStages.map((st, idx) => {
+      const isFirstFloorStage = idx === 0 || (idx === 1 && sortedStages[0].name === 'PLANNING');
+      const isPlanning = st.name === 'PLANNING' || st.sequence === 1;
+
+      let stageTotalInput = 0;
+      let stageTotalPassed = 0;
+      let stageTotalRejected = 0;
+      let stageTotalRemaining = 0;
+      let stageTotalPriorPending = 0;
+
+      const sizeBreakdown = sizes.map((ss) => {
+        const sizeId = ss.sizeId;
+        const sizeName = ss.size?.name || sizeId;
+        const seq = ss.sequence || 0;
+        const orderedQty = productionOrder.order?.orderItems?.find((oi) => oi.sizeId === sizeId)?.quantity || 0;
+        const totalPlanned = plannedSizesMap[sizeId] !== undefined ? plannedSizesMap[sizeId] : orderedQty;
+
+        let inputAvailable = 0;
+        if (isPlanning || isFirstFloorStage) {
+          inputAvailable = totalPlanned;
+        } else {
+          inputAvailable = previousStagePassedMap[sizeId] || 0;
+        }
+
+        // Passed & Rejected specifically in this stage
+        let stagePassed = 0;
+        let stageRejected = 0;
+
+        if (isPlanning) {
+          stagePassed = totalPlanned;
+        } else {
+          entries.forEach((e) => {
+            const matchStage = e.stageId === st.id || e.stage?.id === st.id || e.stage?.name === st.name;
+            if (matchStage && e.sizeId === sizeId) {
+              stagePassed += e.quantityPassed || 0;
+              stageRejected += e.quantityRejected || 0;
+            }
+          });
+        }
+
+        const stageGood = Math.max(0, stagePassed - stageRejected);
+        const stageRemaining = Math.max(0, inputAvailable - stagePassed);
+        const priorStagePending = Math.max(0, totalPlanned - inputAvailable);
+
+        stageTotalInput += inputAvailable;
+        stageTotalPassed += stagePassed;
+        stageTotalRejected += stageRejected;
+        stageTotalRemaining += stageRemaining;
+        stageTotalPriorPending += priorStagePending;
+
+        return {
+          sizeId,
+          sizeName,
+          sequence: seq,
+          totalPlanned,
+          inputAvailable,
+          stagePassed,
+          stageRejected,
+          stageGood,
+          stageRemaining,
+          priorStagePending,
+        };
+      });
+
+      // Update previousStagePassedMap for the next stage in pipeline
+      sizeBreakdown.forEach((sb) => {
+        previousStagePassedMap[sb.sizeId] = sb.stagePassed;
+      });
+
+      // Determine stage status
+      const totalPlannedBatch = Object.values(plannedSizesMap).reduce((a, b) => a + (Number(b) || 0), 0) || productionOrder.totalPlannedQty;
+      let status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'WAITING' = 'WAITING';
+
+      if (isPlanning) {
+        status = 'COMPLETED';
+      } else if (stageTotalPassed >= totalPlannedBatch && stageTotalRemaining === 0) {
+        status = 'COMPLETED';
+      } else if (stageTotalPassed > 0 || (stageTotalInput > 0 && stageTotalRemaining > 0)) {
+        status = 'IN_PROGRESS';
+      } else if (stageTotalInput > 0) {
+        status = 'PENDING';
+      } else {
+        status = 'WAITING';
+      }
+
+      return {
+        stageId: st.id,
+        stageName: st.name,
+        sequence: st.sequence,
+        inputAvailable: stageTotalInput,
+        totalPassed: stageTotalPassed,
+        totalRejected: stageTotalRejected,
+        remainingInStage: stageTotalRemaining,
+        priorStagePending: stageTotalPriorPending,
+        status,
+        sizeBreakdown,
+      };
+    });
+
+    return { stagesFlow };
   }
 
   // 5. Compute Production Dashboard Metrics
@@ -462,6 +677,12 @@ export class ProductionService {
       plannedSizes: params.plannedSizes,
     };
 
+    // Encode planned sizes into notes prefix for robust remote persistence
+    let notesToSave = params.notes || '';
+    if (params.plannedSizes && Object.keys(params.plannedSizes).length > 0) {
+      notesToSave = `[PLAN_SIZES:${JSON.stringify(params.plannedSizes)}] ${notesToSave}`.trim();
+    }
+
     const isUuid = (str?: string) => !!str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
     if (isSupabaseConfigured && navigator.onLine) {
@@ -470,9 +691,9 @@ export class ProductionService {
           id: newProdOrder.id,
           production_number: newProdOrder.productionNumber,
           order_id: isUuid(newProdOrder.orderId) ? newProdOrder.orderId : null,
-          product_id: newProdOrder.productId,
+          product_id: isUuid(newProdOrder.productId) ? newProdOrder.productId : null,
           variant_id: isUuid(newProdOrder.variantId) ? newProdOrder.variantId : null,
-          set_id: newProdOrder.setId,
+          set_id: isUuid(newProdOrder.setId) ? newProdOrder.setId : null,
           current_stage_id: isUuid(newProdOrder.currentStageId) ? newProdOrder.currentStageId : null,
           total_planned_qty: newProdOrder.totalPlannedQty,
           total_completed_qty: 0,
@@ -481,7 +702,7 @@ export class ProductionService {
           target_completion_date: newProdOrder.targetCompletionDate,
           status: newProdOrder.status,
           assigned_team: newProdOrder.assignedTeam,
-          notes: newProdOrder.notes,
+          notes: notesToSave,
         });
 
         if (error) throw error;
@@ -512,6 +733,7 @@ export class ProductionService {
     }
 
     localProductionOrders.unshift(newProdOrder);
+    await LocalStorageManager.cacheItems('production_orders', localProductionOrders);
     try {
       localStorage.setItem('factory_production_orders', JSON.stringify(localProductionOrders));
     } catch {}
@@ -572,6 +794,7 @@ export class ProductionService {
       prodOrder.totalRejectedQty = (prodOrder.totalRejectedQty || 0) + batchRejected;
       prodOrder.entries = [...(prodOrder.entries || []), ...newEntryObjects];
       prodOrder.updatedAt = new Date().toISOString();
+      await LocalStorageManager.cacheItems('production_orders', localProductionOrders);
       try {
         localStorage.setItem('factory_production_orders', JSON.stringify(localProductionOrders));
       } catch {}
@@ -758,6 +981,7 @@ export class ProductionService {
         }
       }
 
+      await LocalStorageManager.cacheItems('production_orders', localProductionOrders);
       try {
         localStorage.setItem('factory_production_orders', JSON.stringify(localProductionOrders));
       } catch {}
@@ -789,6 +1013,29 @@ export class ProductionService {
       } catch (err) {
         console.warn('Supabase stage advance failed, enqueuing offline mutation:', err);
       }
+    }
+  }
+
+  // 9. Delete Production Order
+  static async deleteProductionOrder(productionOrderId: string): Promise<void> {
+    localProductionOrders = localProductionOrders.filter((p) => p.id !== productionOrderId);
+    await LocalStorageManager.cacheItems('production_orders', localProductionOrders);
+    try {
+      localStorage.setItem('factory_production_orders', JSON.stringify(localProductionOrders));
+    } catch {}
+
+    const isUuid = (str?: string) => !!str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+    if (isSupabaseConfigured && navigator.onLine && isUuid(productionOrderId)) {
+      try {
+        await supabase.from('production_entries').delete().eq('production_order_id', productionOrderId);
+        await supabase.from('production_orders').delete().eq('id', productionOrderId);
+      } catch (err) {
+        console.warn('Supabase delete production order error:', err);
+        await LocalStorageManager.enqueueOfflineMutation('production_orders', 'DELETE', { id: productionOrderId });
+      }
+    } else {
+      await LocalStorageManager.enqueueOfflineMutation('production_orders', 'DELETE', { id: productionOrderId });
     }
   }
 

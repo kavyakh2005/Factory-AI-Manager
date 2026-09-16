@@ -34,6 +34,7 @@ export const ProductionPage: React.FC = () => {
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
+  const [selectedStageId, setSelectedStageId] = useState<string | undefined>(undefined);
 
   const queryClient = useQueryClient();
 
@@ -105,13 +106,15 @@ export const ProductionPage: React.FC = () => {
     return matchesStage && matchesSearch;
   });
 
-  const handleOpenDetails = (order: ProductionOrder) => {
+  const handleOpenDetails = (order: ProductionOrder, stageId?: string) => {
     setSelectedOrder(order);
+    setSelectedStageId(stageId);
     setIsDetailsModalOpen(true);
   };
 
-  const handleOpenLogModalForOrder = (order: ProductionOrder) => {
+  const handleOpenLogModalForOrder = (order: ProductionOrder, stageId?: string) => {
     setSelectedOrder(order);
+    setSelectedStageId(stageId);
     setIsLogModalOpen(true);
   };
 
@@ -285,7 +288,9 @@ export const ProductionPage: React.FC = () => {
         <StageKanbanPipeline
           stages={stages}
           productionOrders={productionOrders}
+          allSets={sets}
           onSelectOrder={handleOpenDetails}
+          onLogEntry={handleOpenLogModalForOrder}
           onAdvanceStage={(orderId, stageId) => advanceStageMutation.mutate({ orderId, stageId })}
         />
       ) : (
@@ -400,8 +405,12 @@ export const ProductionPage: React.FC = () => {
 
       <LogProductionEntryModal
         productionOrder={selectedOrder}
+        initialStageId={selectedStageId}
         isOpen={isLogModalOpen}
-        onClose={() => setIsLogModalOpen(false)}
+        onClose={() => {
+          setIsLogModalOpen(false);
+          setSelectedStageId(undefined);
+        }}
         stages={stages}
         rejectionReasons={rejectionReasons}
         allSets={sets}
@@ -419,8 +428,12 @@ export const ProductionPage: React.FC = () => {
 
       <ProductionDetailsModal
         productionOrder={selectedOrder}
+        initialStageId={selectedStageId}
         isOpen={isDetailsModalOpen}
-        onClose={() => setIsDetailsModalOpen(false)}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedStageId(undefined);
+        }}
         stages={stages}
         allSets={sets}
         onOpenLogModal={() => {
@@ -430,6 +443,7 @@ export const ProductionPage: React.FC = () => {
         onStageAdvanced={() => {
           queryClient.invalidateQueries({ queryKey: ['production-dashboard'] });
           setIsDetailsModalOpen(false);
+          setSelectedStageId(undefined);
         }}
       />
     </div>
