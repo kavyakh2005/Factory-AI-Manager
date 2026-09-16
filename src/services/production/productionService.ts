@@ -242,12 +242,24 @@ export class ProductionService {
       const setObj = sets.find((s) => s.id === po.setId) || po.set;
       const stg = stages.find((s) => s.id === po.currentStageId || s.name === po.currentStage?.name) || po.currentStage || stages[0];
 
+      const entriesWithSizes = po.entries?.map((e) => {
+        if (e.size?.name) return e;
+        const sizeMatch = setObj?.setSizes?.find(
+          (ss) => ss.sizeId === e.sizeId || ss.id === e.sizeId || ss.size?.id === e.sizeId
+        )?.size;
+        return {
+          ...e,
+          size: sizeMatch || e.size,
+        };
+      });
+
       return {
         ...po,
         order: ord,
         product: prd,
         set: setObj,
         currentStage: stg,
+        entries: entriesWithSizes || po.entries,
       };
     });
 
@@ -526,16 +538,24 @@ export class ProductionService {
     let batchRejected = 0;
     const newEntryObjects: ProductionEntry[] = [];
 
+    const allSets = await OrderService.getSetsWithSizes();
+    const setObj = prodOrder?.set || allSets.find((s) => s.id === prodOrder?.setId);
+
     params.entries.forEach((row) => {
       if (row.quantityPassed > 0 || row.quantityRejected > 0) {
         batchPassed += row.quantityPassed;
         batchRejected += row.quantityRejected;
+
+        const sizeObj = setObj?.setSizes?.find(
+          (ss) => ss.sizeId === row.sizeId || ss.id === row.sizeId || ss.size?.id === row.sizeId
+        )?.size;
 
         const entry: ProductionEntry = {
           id: crypto.randomUUID(),
           productionOrderId: params.productionOrderId,
           stageId: params.stageId,
           sizeId: row.sizeId,
+          size: sizeObj,
           quantityPassed: row.quantityPassed,
           quantityRejected: row.quantityRejected,
           rejectionReason: row.rejectionReason,

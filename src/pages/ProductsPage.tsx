@@ -613,6 +613,10 @@ export const ProductsPage: React.FC = () => {
         availableSets={sets}
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: ['products-with-ready-stock'] });
+          queryClient.invalidateQueries({ queryKey: ['products-list'] });
+          setSelectedCategory('ALL');
+          setSelectedStatus('ALL');
+          setSelectedStockFilter('ALL');
         }}
       />
 

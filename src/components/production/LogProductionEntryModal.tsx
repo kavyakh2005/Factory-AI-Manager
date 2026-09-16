@@ -87,9 +87,21 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
     e.preventDefault();
     setErrorMessage(null);
 
-    if (totalPassedBatch === 0 && totalRejectedBatch === 0) {
-      setErrorMessage('Please enter passed or rejected quantities for at least one size.');
-      return;
+    // Validate that passed quantities don't exceed remaining target for any size
+    for (const ss of availableSizes) {
+      const plannedQty = productionOrder.plannedSizes?.[ss.sizeId] || (productionOrder.order?.orderItems?.find((oi) => oi.sizeId === ss.sizeId)?.quantity) || 0;
+      const passedSoFar = (productionOrder.entries || []).filter((e) => e.sizeId === ss.sizeId && (e.stageId === selectedStageId || e.stage?.id === selectedStageId)).reduce((sum, e) => sum + e.quantityPassed, 0);
+      const remaining = Math.max(0, plannedQty - passedSoFar);
+      const row = entries[ss.sizeId];
+      if (row && row.passed > 0) {
+        if (remaining === 0) {
+          setErrorMessage(`Size ${ss.size?.name || ss.sizeId} ka planning target (${plannedQty} pcs) already complete ho chuka hai.`);
+          return;
+        } else if (row.passed > remaining) {
+          setErrorMessage(`Size ${ss.size?.name || ss.sizeId} mein passed quantity (${row.passed} pcs) remaining target (${remaining} pcs) se zyada nahi ho sakti.`);
+          return;
+        }
+      }
     }
 
     const payloadEntries = Object.entries(entries).map(([sizeId, val]) => ({
@@ -257,10 +269,14 @@ export const LogProductionEntryModal: React.FC<LogProductionEntryModalProps> = (
                       <input
                         type="number"
                         min="0"
-                        placeholder="0"
+                        max={remaining}
+                        disabled={remaining === 0}
+                        placeholder={remaining === 0 ? 'Completed' : '0'}
                         value={row.passed === 0 ? '' : row.passed}
                         onChange={(e) => handlePassedChange(ss.sizeId, e.target.value)}
-                        className="w-full text-center py-1.5 rounded-lg bg-factory-950 border border-slate-700 text-slate-100 text-xs font-bold focus:outline-none focus:border-emerald-500"
+                        className={`w-full text-center py-1.5 rounded-lg bg-factory-950 border border-slate-700 text-slate-100 text-xs font-bold focus:outline-none focus:border-emerald-500 ${
+                          remaining === 0 ? 'opacity-50 cursor-not-allowed bg-slate-900 text-slate-500' : ''
+                        }`}
                       />
                     </div>
 

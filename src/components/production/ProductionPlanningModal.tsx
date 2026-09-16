@@ -3,7 +3,7 @@ import { Order, Product, Set } from '../../types';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { ProductionService } from '../../services/production/productionService';
-import { Factory, Calendar, Users, AlertCircle } from 'lucide-react';
+import { Factory, Calendar, AlertCircle } from 'lucide-react';
 import { DEFAULT_FACTORY_COLORS } from '../../services/products/productService';
 
 interface ProductionPlanningModalProps {
@@ -30,7 +30,6 @@ export const ProductionPlanningModal: React.FC<ProductionPlanningModalProps> = (
   const [targetDate, setTargetDate] = useState<string>(
     new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0]
   );
-  const [assignedTeam, setAssignedTeam] = useState<string>('Floor Line Alpha');
   const [notes, setNotes] = useState<string>('');
   const [plannedSizes, setPlannedSizes] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -105,7 +104,6 @@ export const ProductionPlanningModal: React.FC<ProductionPlanningModalProps> = (
         setId,
         plannedSizes,
         targetCompletionDate: new Date(targetDate).toISOString(),
-        assignedTeam,
         notes,
       });
 
@@ -279,38 +277,19 @@ export const ProductionPlanningModal: React.FC<ProductionPlanningModalProps> = (
           </div>
         </div>
 
-        {/* Timeline & Team Allocation */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-amber-400" />
-              <span>Target Floor Completion Date *</span>
-            </label>
-            <input
-              type="date"
-              required
-              value={targetDate}
-              onChange={(e) => setTargetDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-factory-950 border border-slate-700 text-slate-100 text-xs focus:border-primary-500 outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider flex items-center gap-1">
-              <Users className="w-3 h-3 text-primary-400" />
-              <span>Assigned Floor Line / Team</span>
-            </label>
-            <select
-              value={assignedTeam}
-              onChange={(e) => setAssignedTeam(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-factory-950 border border-slate-700 text-slate-100 text-xs focus:border-primary-500 outline-none"
-            >
-              <option value="Floor Line Alpha (Cutting & Stitching)">Floor Line Alpha (Cutting & Stitching)</option>
-              <option value="Floor Line Beta (Stitching Team 2)">Floor Line Beta (Stitching Team 2)</option>
-              <option value="Floor Line Gamma (Finishing & QC)">Floor Line Gamma (Finishing & QC)</option>
-              <option value="Express Sampling Team">Express Sampling Team</option>
-            </select>
-          </div>
+        {/* Timeline */}
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider flex items-center gap-1">
+            <Calendar className="w-3 h-3 text-amber-400" />
+            <span>Target Floor Completion Date *</span>
+          </label>
+          <input
+            type="date"
+            required
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg bg-factory-950 border border-slate-700 text-slate-100 text-xs focus:border-primary-500 outline-none"
+          />
         </div>
 
         {/* Notes */}

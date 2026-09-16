@@ -129,11 +129,24 @@ export const StageKanbanPipeline: React.FC<StageKanbanPipelineProps> = ({
                         </div>
                       </div>
 
-                      {/* Bottom Assigned Line & Advance Action */}
-                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60 text-[10px]">
-                        <div className="text-slate-400 flex items-center gap-1 truncate max-w-[120px]">
-                          <User className="w-3 h-3 text-slate-500 shrink-0" />
-                          <span className="truncate">{order.assignedTeam || 'Floor Line 1'}</span>
+                      {/* Bottom Direct Stage Mover & Advance Action */}
+                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60 text-[10px] gap-2">
+                        {/* Quick Jump Dropdown */}
+                        <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={order.currentStageId || stage.id}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              onAdvanceStage(order.id, e.target.value);
+                            }}
+                            className="w-full bg-factory-950 border border-slate-700/80 rounded px-1.5 py-0.5 text-[10px] text-slate-300 font-medium focus:border-primary-500 outline-none cursor-pointer"
+                          >
+                            {stages.map((st) => (
+                              <option key={st.id} value={st.id}>
+                                → {st.name}
+                              </option>
+                            ))}
+                          </select>
                         </div>
 
                         {nextStage && (
@@ -143,10 +156,11 @@ export const StageKanbanPipeline: React.FC<StageKanbanPipelineProps> = ({
                               e.stopPropagation();
                               onAdvanceStage(order.id, nextStage.id);
                             }}
-                            className="flex items-center gap-1 text-primary-400 hover:text-primary-300 font-bold hover:underline"
+                            title={`Advance to ${nextStage.name}`}
+                            className="flex items-center gap-1 text-primary-400 hover:text-primary-300 font-bold px-1.5 py-0.5 rounded bg-primary-950/40 border border-primary-500/30 hover:bg-primary-900/50 transition-all shrink-0"
                           >
-                            <span>Advance</span>
-                            <ArrowRight className="w-3 h-3" />
+                            <span>Next</span>
+                            <ArrowRight className="w-2.5 h-2.5" />
                           </button>
                         )}
                       </div>

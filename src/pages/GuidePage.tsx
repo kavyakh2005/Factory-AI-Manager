@@ -31,7 +31,11 @@ import {
   ClipboardList,
   Check,
   Zap,
+  Globe,
+  Languages,
 } from 'lucide-react';
+
+type Language = 'EN' | 'HI';
 
 interface GuideChapter {
   id: string;
@@ -49,7 +53,7 @@ interface GuideChapter {
   };
 }
 
-const GUIDE_CHAPTERS: GuideChapter[] = [
+const GUIDE_CHAPTERS_EN: GuideChapter[] = [
   {
     id: 'quick-start',
     title: '1. Quick Start & Onboarding Roadmap',
@@ -87,7 +91,7 @@ const GUIDE_CHAPTERS: GuideChapter[] = [
         },
       ],
       example: {
-        title: 'Factory Flow Pipeline',
+        title: 'Factory Operational Flow Pipeline',
         body: 'SETS & SIZES → PRODUCT MASTER → PRODUCTION PIPELINE (Cutting → Stitching → Finishing → QC → Packing → Ready) → FINISHED GOODS READY STOCK → CUSTOMER ORDERS → DISPATCH & INVOICING',
       },
     },
@@ -135,41 +139,46 @@ const GUIDE_CHAPTERS: GuideChapter[] = [
   {
     id: 'production-pipeline',
     title: '3. Production Pipeline & Floor Execution',
-    subtitle: 'Managing batches across Planning, Cutting, Stitching, Finishing, QC, Packing & Ready',
+    subtitle: 'Managing batches, stage skipping, over-logging protection, fast-track, and size audit',
     icon: <Factory className="w-5 h-5 text-blue-400" />,
     category: 'MANUFACTURING',
     content: {
       summary:
-        'The Production module tracks garment batches as they move physically across factory workstations with real-time bottleneck detection.',
+        'The Production module tracks garment batches across 7 stages with instant 1-click stage jumping, skipping, strict over-logging limits, and detailed size-wise audit logs.',
       steps: [
         {
           step: 1,
           title: 'Create Production Work Order Plan',
           desc: 'Select Product Style, Garment Set, Colorway, and enter planned targets for each size. Optionally link to an active customer order.',
-          tip: 'If dropdowns are empty, create a set in /sets-sizes and style in /products first!',
+          tip: 'If dropdowns are empty, create a size set in /sets-sizes and style in /products first!',
         },
         {
           step: 2,
-          title: 'Advance Batches Across Pipeline Stages',
-          desc: 'Move cards on the Kanban board: Planning → Cutting → Stitching → Finishing → Quality Check → Packing → Ready.',
+          title: 'Direct Stage Skipping & Progression Stepper',
+          desc: 'You can directly click any stage in the Pipeline Progression stepper to jump or skip intermediate steps (e.g. pre-cut job work skipping cutting directly to stitching).',
         },
         {
           step: 3,
-          title: 'Log Stage Output & Defect Rejections',
-          desc: 'Click "Log Stage Output" on any active batch. Enter pieces passed and pieces rejected with reason (e.g. Staining, Stitch Skip, Measurement Mismatch).',
+          title: 'Over-Logging Protection & Remaining Quantity Validation',
+          desc: 'The system strictly caps logged passed pieces to remaining planned targets per size (e.g., if target is 10 pcs, supervisor cannot log 16 passed pieces), preventing false inventory inflation.',
         },
         {
           step: 4,
-          title: 'Automatic Transfer to Ready Stock',
-          desc: 'When batch reaches PACKING / READY, the system automatically logs immutable ledger entries and updates Finished Goods Ready Stock.',
+          title: '1-Click Fast-Track to READY',
+          desc: 'Click "⚡ Fast-Track to READY" in the batch modal to instantly mark 100% planned pieces as QC-Passed and credit them directly into Ready Stock.',
+        },
+        {
+          step: 5,
+          title: 'Print Route Traveler Slip & Size Audit Logs',
+          desc: 'Generate physical job cards for cutting masters and view chronological audit trails showing exact sizes (e.g., Size 38, Size 40) rather than generic labels.',
         },
       ],
     },
   },
   {
     id: 'inventory-ledger',
-    title: '4. Inventory Architecture & Aging Control',
-    subtitle: 'Physical vs Reserved vs Dispatchable Stock, Raw Materials, and 90+ Day Aging',
+    title: '4. Inventory Architecture & Stock Aging Control',
+    subtitle: 'Physical vs Reserved vs Dispatchable Stock, and 90+ Day Dead Stock Control',
     icon: <Boxes className="w-5 h-5 text-teal-400" />,
     category: 'INVENTORY',
     content: {
@@ -225,13 +234,18 @@ const GUIDE_CHAPTERS: GuideChapter[] = [
   {
     id: 'dispatch-shipping',
     title: '6. Dispatch, Carton Packing & Logistics',
-    subtitle: 'Packing slips, courier tracking, and double-deduction prevention',
+    subtitle: 'Packing slips, carton boxes, transporter LR tracking, and double-deduction prevention',
     icon: <Truck className="w-5 h-5 text-cyan-400" />,
     category: 'LOGISTICS',
     content: {
       summary:
-        'Once orders are packed, the Dispatch module handles delivery challans, transporter LR numbers, and records stock deductions.',
+        'Once orders are ready, the Dispatch module manages carton packing, gross weight calculations, transporter LR numbers, and records instant stock deductions.',
       rules: [
+        {
+          title: 'Carton Packing & Transport Challans',
+          desc: 'Pack garments into numbered cartons, calculate shipment weights, and print Transport Slips with transporter names and LR / Bilty tracking numbers.',
+          iconType: 'check',
+        },
         {
           title: 'Idempotent Dispatch Deductions',
           desc: 'Executing a dispatch decreases Physical Stock and releases Reserved Stock simultaneously without creating duplicate deductions.',
@@ -246,109 +260,301 @@ const GUIDE_CHAPTERS: GuideChapter[] = [
     },
   },
   {
-    id: 'purchases-sourcing',
-    title: '7. Purchases & Raw Material Sourcing',
-    subtitle: 'Fabric procurement, trims inventory, and supplier purchase orders',
-    icon: <ShoppingBag className="w-5 h-5 text-purple-400" />,
-    category: 'PROCUREMENT',
+    id: 'custom-roles',
+    title: '7. Custom Roles & Granular Permissions',
+    subtitle: 'Owner-defined roles with feature-by-feature access control',
+    icon: <Shield className="w-5 h-5 text-indigo-400" />,
+    category: 'SECURITY',
     content: {
       summary:
-        'Keep fabric mills, yarn suppliers, and accessory vendors organized. Create POs and receive fabric inward with meter/kg tracking.',
-      steps: [
+        'The factory owner has complete authority to create custom roles (e.g. Floor Master, Billing Operator) and grant exact View/Create/Edit/Delete permissions per module.',
+      rules: [
         {
-          step: 1,
-          title: 'Create Purchase Order (/purchases)',
-          desc: 'Select Supplier Mill, Material Category (Fabric, Trims, Thread, Labels), rate, and expected arrival date.',
+          title: 'Owner Unrestricted Master Access',
+          desc: 'The Owner role retains full unrestricted access across all modules, settings, database operations, and user audits.',
+          iconType: 'check',
         },
         {
-          step: 2,
-          title: 'Receive Material Inward',
-          desc: 'When goods arrive at the factory gate, click "Receive Goods", verify quantity, and update raw material stock.',
+          title: 'Custom Staff Roles (/settings)',
+          desc: 'Create new roles like "Cutting Supervisor" with access only to Production, or "Accountant" with access only to Payments & Expenses.',
+          iconType: 'info',
         },
       ],
     },
   },
   {
-    id: 'financials-expenses',
-    title: '8. Financials, Payments & Ledger',
-    subtitle: 'Receivables, supplier payments, operating overheads, and P&L',
-    icon: <CreditCard className="w-5 h-5 text-emerald-400" />,
-    category: 'FINANCE',
+    id: 'ai-manager',
+    title: '8. AI Manager & Automation Engine',
+    subtitle: 'Gemini AI intelligence for demand forecasting and floor optimization',
+    icon: <Bot className="w-5 h-5 text-emerald-400" />,
+    category: 'INTELLIGENCE',
     content: {
       summary:
-        'Monitor cash flow, outstanding market payments, worker piece-rate payouts, and electricity/rent overheads.',
-      steps: [
+        'Ask the AI Assistant natural-language questions to analyze factory performance, calculate fabric consumption, and detect production bottlenecks.',
+      rules: [
         {
-          step: 1,
-          title: 'Record Customer Payments (/payments)',
-          desc: 'Log cash, bank NEFT/RTGS, or cheque payments against customer invoices to reduce outstanding receivables.',
+          title: 'Natural Language Voice & Text Chat',
+          desc: 'Ask: "Which products have high dead stock over 60 days?" or "Generate a cutting order for 500 pcs Cotton Kurti".',
+          iconType: 'check',
         },
         {
-          step: 2,
-          title: 'Log Factory Expenses (/expenses)',
-          desc: 'Track operational costs: Stitching Master wages, fabric dyeing, machinery maintenance, thread purchases, and factory rent.',
+          title: 'Fabric Requirement Calculator',
+          desc: 'AI computes exact fabric meterage required based on garment style consumption and ordered size ratios.',
+          iconType: 'info',
         },
       ],
     },
   },
+];
+
+const GUIDE_CHAPTERS_HI: GuideChapter[] = [
   {
-    id: 'team-roles-rbac',
-    title: '9. Owner Custom Roles & Granular Permissions',
-    subtitle: 'How the Owner controls custom designations and grants specific module access',
-    icon: <Shield className="w-5 h-5 text-primary-400" />,
-    category: 'ADMINISTRATION',
-    badge: 'Owner Control',
+    id: 'quick-start',
+    title: '1. शुरुआती सेटअप और रोडमैप (Quick Start)',
+    subtitle: '5 मिनट में अपनी पूरी गारमेंट फैक्ट्री को सिस्टम पर चालू करने का सही क्रम',
+    icon: <Zap className="w-5 h-5 text-amber-400" />,
+    category: 'शुरुआत करें',
+    badge: 'सबसे पहले पढ़ें',
     content: {
       summary:
-        'The Owner has 100% control over the software. You can create custom designations (e.g. Cutting Master, Floor Supervisor, Accountant) and choose exactly which modules each user can access.',
+        'सॉफ्टवेयर में खाली ड्रॉपडाउन से बचने और सभी ऑर्डर्स और प्रोडक्शन के सही कैलकुलेशन के लिए अपनी फैक्ट्री का डेटा इस क्रम में सेट करें:',
       steps: [
         {
           step: 1,
-          title: 'Open Settings → Team & Permissions (/settings)',
-          desc: 'Click "Add Factory User". Enter the staff member\'s Name, Email, Phone, and Password.',
+          title: 'साइज सेट और माप बनाएं (/sets-sizes)',
+          desc: 'सबसे पहले अपने गारमेंट के साइज सेट बनाएं (जैसे Standard Set: 38, 40, 42, 44, 46; Kids Set: 24, 26, 28, 30, 32). बिना साइज सेट के प्रोडक्ट और प्रोडक्शन साइज ब्रेकडाउन नहीं निकाल सकते।',
+          link: { label: 'Sets & Sizes पर जाएं', url: '/sets-sizes' },
         },
         {
           step: 2,
-          title: 'Enter Custom Role Designation',
-          desc: 'Type any custom designation (e.g. "Store Incharge") or click a quick suggestion preset.',
+          title: 'प्रोडक्ट मास्टर में गारमेंट स्टाइल रजिस्टर करें (/products)',
+          desc: 'अपनी फैक्ट्री के परमानेंट स्टाइल्स बनाएं (जैसे Cotton Coord Set, SKU: CCS-101, फैब्रिक: 100% Cotton, लागत: ₹450, होलसेल रेट: ₹850) और स्टेप 1 में बनाए गए साइज सेट से लिंक करें।',
+          link: { label: 'Product Master पर जाएं', url: '/products' },
         },
         {
           step: 3,
-          title: 'Select Granular Module Checkboxes',
-          desc: 'Tick only the modules this staff needs (e.g. tick only "Production" & "Products" for floor masters; tick "Payments" & "Orders" for billing staff).',
+          title: 'कस्टमर्स और सप्लायर्स जोड़ें (/customers & /suppliers)',
+          desc: 'अपने होलसेल खरीदार, रिटेलर्स, फैब्रिक मिल्स और धागे/बटन सप्लायर्स को क्रेडिट लिमिट और GST नंबर के साथ जोड़ें।',
+          link: { label: 'Customers पर जाएं', url: '/customers' },
         },
         {
           step: 4,
-          title: 'Dynamic User Sidebar & Security',
-          desc: 'When that user logs in, their sidebar only shows the modules you approved. Unapproved modules are completely hidden and blocked.',
+          title: 'प्रोडक्शन प्लान करें या ऑर्डर बुक करें (/production & /orders)',
+          desc: 'अब आप कस्टमर ऑर्डर बुक कर सकते हैं (जो स्टॉक को ऑटो-रिज़र्व करता है) या फ्लोर पर कपड़े सिलने के लिए प्रोडक्शन वर्क ऑर्डर बना सकते हैं।',
+          link: { label: 'Production पर जाएं', url: '/production' },
+        },
+      ],
+      example: {
+        title: 'फैक्ट्री ऑपरेशन का पूरा फ्लो',
+        body: 'साइज सेट (SETS & SIZES) → प्रोडक्ट मास्टर (PRODUCTS) → प्रोडक्शन वर्कफ़्लो (कटिंग → सिलाई → फिनिशिंग → QC → पैकिंग → रेडी) → फिनिश्ड गुड्स रेडी स्टॉक → कस्टमर ऑर्डर → डिस्पैच और इनवॉइस',
+      },
+    },
+  },
+  {
+    id: 'product-master-ready-stock',
+    title: '2. प्रोडक्ट मास्टर और रेडी स्टॉक कनेक्शन',
+    subtitle: 'स्टाइल परमानेंट रजिस्टर होती है और तैयार माल अपने आप रेडी स्टॉक बन जाता है',
+    icon: <Package className="w-5 h-5 text-emerald-400" />,
+    category: 'मुख्य नियम',
+    badge: 'महत्वपूर्ण नियम',
+    content: {
+      summary:
+        'Product Master आपकी फैक्ट्री का परमानेंट कैटलॉग है। जब भी प्रोडक्शन बैच तैयार होता है, तैयार पीस अपने आप उसी प्रोडक्ट के तहत रेडी स्टॉक में जुड़ जाते हैं (बिना कोई डुप्लीकेट प्रोडक्ट बनाए)।',
+      rules: [
+        {
+          title: 'प्रोडक्ट मास्टर रिकॉर्ड परमानेंट होता है',
+          desc: 'प्रोडक्शन खत्म होने पर प्रोडक्ट को कभी डिलीट या दोबारा न बनाएं। प्रोडक्ट कैटलॉग में रहता है और उसकी तैयार स्टॉक क्वांटिटी अपने आप बढ़ जाती है।',
+          iconType: 'check',
+        },
+        {
+          title: 'साइज-वाइज़ रेडी स्टॉक ट्रैकिंग',
+          desc: 'स्टॉक हमेशा बिल्कुल सटीक ट्रैक होता है: प्रोडक्ट → साइज सेट → साइज → पीस (जैसे Cotton Coord Set → Standard Set → 38: 15, 40: 20, 42: 25, 44: 22, 46: 18 = कुल 100 सेट)।',
+          iconType: 'check',
+        },
+        {
+          title: 'सख्त QC पास नियम',
+          desc: 'केवल वही पीस रेडी स्टॉक में जाते हैं जो क्वालिटी चेक पास करते हैं और पैक होते हैं। रिजेक्टेड (खराब) पीस डिफेक्ट एनालिसिस में जाते हैं और बिक्री योग्य स्टॉक में नहीं जुड़ते।',
+          iconType: 'alert',
+        },
+        {
+          title: 'पार्टीअल (आधा) बैच सपोर्ट',
+          desc: 'अगर 500 पीस के बैच में से आज 120 पीस तैयार हो गए, तो वे तुरंत रेडी स्टॉक में जुड़ जाते हैं। बाकी 380 पीस जब बाद में बनेंगे तब जुड़ जाएंगे (पूरे बैच का इंतज़ार नहीं करना पड़ता)।',
+          iconType: 'info',
+        },
+      ],
+      faqs: [
+        {
+          q: 'लाइव रेडी स्टॉक कहां देखें?',
+          a: 'Product Master (/products) खोलें। आपको कुल रेडी स्टॉक, हर कार्ड पर साइज बैज दिखेंगे, और किसी भी प्रोडक्ट पर क्लिक करने से साइज मैट्रिक्स और स्टॉक लेजर खुल जाएगा।',
         },
       ],
     },
   },
   {
-    id: 'ai-manager-pwa',
-    title: '10. AI Assistant & Native PWA Installation',
-    subtitle: 'AI Floor Insights, offline resilience, and browser address bar app installation',
-    icon: <Bot className="w-5 h-5 text-teal-400" />,
-    category: 'ADVANCED',
+    id: 'production-pipeline',
+    title: '3. प्रोडक्शन वर्कफ़्लो और फ्लोर ट्रैकिंग',
+    subtitle: 'बैच मैनेज करना, स्टेप स्किप करना, ओवर-लॉगिंग सुरक्षा, 1-क्लिक फास्ट-ट्रैक और साइज ऑडिट',
+    icon: <Factory className="w-5 h-5 text-blue-400" />,
+    category: 'मैन्युफैक्चरिंग',
     content: {
       summary:
-        'Use Google Gemini AI intelligence for automated bottleneck advice and install the app natively on Windows/Mac/Android/iOS.',
+        'प्रोडक्शन मॉड्यूल कपड़ों के बैच को 7 स्टेजों में ट्रैक करता है — जिसमें 1-क्लिक में किसी भी स्टेज पर कूदना (Jump/Skip), ओवर-लॉगिंग पर पक्की रोक और हर साइज का ऑडिट ट्रेल शामिल है।',
+      steps: [
+        {
+          step: 1,
+          title: 'प्रोडक्शन वर्क ऑर्डर प्लान बनाएं',
+          desc: 'स्टाइल, साइज सेट, कलर चुनें और हर साइज के टारगेट पीस डालें। चाहें तो इसे किसी कस्टमर ऑर्डर से लिंक करें।',
+          tip: 'अगर ड्रॉपडाउन खाली दिखें, तो पहले /sets-sizes में साइज सेट और /products में स्टाइल बनाएं!',
+        },
+        {
+          step: 2,
+          title: 'स्टेज जंप और स्किप करें (Direct Stage Switch)',
+          desc: 'आप प्रोग्रेशन बार में किसी भी स्टेज (जैसे Planning, Cutting, Stitching) पर डायरेक्ट क्लिक करके बैच को वहां शिफ्ट या बीच के स्टेप्स स्किप कर सकते हैं।',
+        },
+        {
+          step: 3,
+          title: 'ओवर-लॉगिंग सुरक्षा (Over-logging Prevention)',
+          desc: 'सिस्टम हर साइज के टारगेट पीस से ज्यादा पास करने की अनुमति नहीं देता (जैसे अगर 10 पीस प्लान थे, तो कोई गलती से 16 पास नहीं कर सकता)। यह स्टॉक के आंकड़ों को 100% सही रखता है।',
+        },
+        {
+          step: 4,
+          title: '1-क्लिक Fast-Track to READY',
+          desc: 'बैच मोडल में "⚡ Fast-Track to READY" दबाएं — यह 1 सेकंड में 100% माल को QC पास करके सीधे गोदाम के रेडी स्टॉक में जमा कर देता है।',
+        },
+        {
+          step: 5,
+          title: 'प्रिंट रूट स्लिप और सटीक साइज ऑडिट लॉग',
+          desc: '"Print Route Slip" बटन दबाकर कटिंग मास्टर और सुपरवाइजर के लिए पेपर स्लिप प्रिंट करें, और ऑडिट हिस्ट्री में हर पीस का साइज (जैसे Size 38, Size 40) स्पष्ट देखें।',
+        },
+      ],
+    },
+  },
+  {
+    id: 'inventory-ledger',
+    title: '4. इन्वेंटरी स्टॉक और 90+ दिन एजिंग कंट्रोल',
+    subtitle: 'फिजिकल स्टॉक, रिज़र्व्ड स्टॉक, बेचने योग्य स्टॉक और डेड स्टॉक अलर्ट',
+    icon: <Boxes className="w-5 h-5 text-teal-400" />,
+    category: 'इन्वेंटरी',
+    content: {
+      summary:
+        'इन्वेंटरी सिस्टम 3-क्वांटिटी मॉडल और पक्के लेजर रिकॉर्ड्स के साथ काम करता है ताकि कभी गलत स्टॉक न दिखे।',
       rules: [
         {
-          title: 'Native Browser PWA Installation',
-          desc: 'Open the app in Google Chrome or Microsoft Edge. Click the native "Install App" icon located in the browser address bar (top-right) to install Factory AI Manager as a native desktop application with offline support.',
+          title: '3-क्वांटिटी स्टॉक फॉर्मूला',
+          desc: '1. Physical Stock = गोदाम में रखा कुल माल।\n2. Reserved Stock = जो माल ग्राहकों के ऑर्डर के लिए बुक/होल्ड है।\n3. Dispatchable Stock = Physical - Reserved (जो अभी तुरंत नया बेचा जा सकता है)।',
           iconType: 'check',
         },
         {
-          title: 'AI Floor Assistant (/ai-manager)',
-          desc: 'The AI analyzes your live production numbers, calculates daily factory yield, alerts you to delayed batches, and suggests production priority adjustments.',
+          title: 'नेगेटिव स्टॉक नहीं हो सकता',
+          desc: 'सिस्टम बिना माल के ओवर-सेलिंग रोकने के लिए ऑर्डर बुक या डिस्पैच करने से पहले स्टॉक चेक करता है।',
+          iconType: 'alert',
+        },
+        {
+          title: 'स्टॉक एजिंग और डेड स्टॉक ट्रैकिंग',
+          desc: 'गोदाम के माल को दिनों के हिसाब से बांटा जाता है: 0-30 दिन (फास्ट), 31-60 दिन (मीडियम), 61-90 दिन (धीमा), और 90+ दिन (डेड स्टॉक चेतावनी)।',
           iconType: 'info',
         },
+      ],
+    },
+  },
+  {
+    id: 'orders-sales',
+    title: '5. कस्टमर ऑर्डर्स और स्टॉक रिज़र्वेशन',
+    subtitle: 'होलसेल ऑर्डर बुकिंग, ऑटो-स्टॉक होल्ड और GST टैक्स इनवॉइस',
+    icon: <ShoppingCart className="w-5 h-5 text-amber-400" />,
+    category: 'बिक्री और ऑर्डर्स',
+    content: {
+      summary:
+        'जब कोई खरीदार ऑर्डर देता है, सिस्टम तुरंत रेडी स्टॉक चेक करके पीस रिज़र्व कर लेता है ताकि वही माल किसी दूसरे ग्राहक को न बिक जाए।',
+      steps: [
         {
-          title: '7-Day Isolated Local Retention',
-          desc: 'Local testing stays fast and isolated with 7-day auto-purge, while production connects directly to Supabase cloud database.',
+          step: 1,
+          title: 'कस्टमर ऑर्डर बनाएं (/orders)',
+          desc: 'ग्राहक चुनें, डिलीवरी तारीख डालें और स्टाइल के साइज-वाइज़ पीस भरें।',
+        },
+        {
+          step: 2,
+          title: 'ऑटो स्टॉक अलोकेशन',
+          desc: 'अगर गोदाम में माल तैयार है, तो वह तुरंत RESERVED हो जाता है। अगर माल कम है, तो ऑर्डर पर "Production Required" का टैग लग जाता है।',
+        },
+        {
+          step: 3,
+          title: 'इनवॉइस और चालान प्रिंट करें',
+          desc: 'ऑर्डर पर "Print Invoice" दबाकर पक्का GST टैक्स इनवॉइस और डिलीवरी चालान निकालें।',
+        },
+      ],
+    },
+  },
+  {
+    id: 'dispatch-shipping',
+    title: '6. डिस्पैच, कार्टन पैकिंग और ट्रांसपोर्ट',
+    subtitle: 'कार्टन बॉक्स पैकिंग, ग्रॉस वजन, ट्रांसपोर्ट LR नंबर और सटीक स्टॉक कटौती',
+    icon: <Truck className="w-5 h-5 text-cyan-400" />,
+    category: 'लॉजिस्टिक्स',
+    content: {
+      summary:
+        'माल तैयार होने पर डिस्पैच मॉड्यूल कार्टन बॉक्स पैकिंग, ट्रांसपोर्ट LR बिल्टी नंबर और गोदाम से माल घटाने का काम संभालता है।',
+      rules: [
+        {
+          title: 'कार्टन पैकिंग और ट्रांसपोर्ट चालान',
+          desc: 'कपड़ों को नंबर वाले कार्टन में पैक करें, कुल वजन दर्ज करें और ट्रांसपोर्टर का नाम व LR / बिल्टी नंबर के साथ स्लिप प्रिंट करें।',
           iconType: 'check',
+        },
+        {
+          title: 'सटीक डिस्पैच कटौती',
+          desc: 'डिस्पैच होते ही गोदाम से फिजिकल स्टॉक कम होता है और रिज़र्व्ड स्टॉक रिलीज हो जाता है।',
+          iconType: 'check',
+        },
+        {
+          title: 'कस्टमर रिटर्न और QC री-स्टॉकिंग',
+          desc: 'अगर ग्राहक माल लौटाता है, तो इन्वेंटरी में Return दर्ज करें। जो पीस QC पास करते हैं वे वापस रेडी स्टॉक में जुड़ जाते हैं।',
+          iconType: 'info',
+        },
+      ],
+    },
+  },
+  {
+    id: 'custom-roles',
+    title: '7. कस्टम रोल्स और परमिशन कंट्रोल',
+    subtitle: 'ओनर द्वारा बनाए गए रोल्स और हर मॉड्यूल की अलग-अलग परमिशन',
+    icon: <Shield className="w-5 h-5 text-indigo-400" />,
+    category: 'सिक्योरिटी',
+    content: {
+      summary:
+        'फैक्ट्री ओनर के पास पूरा अधिकार है कि वह अपनी मर्जी से नए रोल्स (जैसे कटिंग मास्टर, बिलिंग ऑपरेटर) बनाए और तय करे कि कौन क्या देख या बदल सकता है।',
+      rules: [
+        {
+          title: 'ओनर को पूरा अधिकार',
+          desc: 'Owner रोल के पास सभी फीचर्स, सेटिंग्स, यूजर परमिशन और डेटाबेस पर पूरा कंट्रोल रहता है।',
+          iconType: 'check',
+        },
+        {
+          title: 'स्टाफ के लिए रोल बनाएं (/settings)',
+          desc: 'सेटिंग्स में जाकर नया रोल बनाएं (जैसे केवल प्रोडक्शन देखने वाला सुपरवाइजर या केवल पेमेंट देखने वाला अकाउंटेंट)।',
+          iconType: 'info',
+        },
+      ],
+    },
+  },
+  {
+    id: 'ai-manager',
+    title: '8. AI मैनेजर और स्मार्ट असिस्टेंट',
+    subtitle: 'Google Gemini AI द्वारा डिमांड फोरकास्टिंग और प्रोडक्शन सलाह',
+    icon: <Bot className="w-5 h-5 text-emerald-400" />,
+    category: 'AI इंटेलिजेंस',
+    content: {
+      summary:
+        'AI असिस्टेंट से आसान भाषा में सवाल पूछकर फैक्ट्री की परफॉरमेंस, कपड़े की खपत (Fabric Meterage) और प्रोडक्शन अड़चनें जान सकते हैं।',
+      rules: [
+        {
+          title: 'आसान भाषा में बातचीत',
+          desc: 'पूछें: "कौन से प्रोडक्ट 60 दिन से ज्यादा पुराने गोदाम में पड़े हैं?" या "500 पीस कुर्ती के लिए कितना कपड़ा लगेगा?"',
+          iconType: 'check',
+        },
+        {
+          title: 'फैब्रिक कैलकुलेटर',
+          desc: 'AI हर गारमेंट साइज के हिसाब से कुल लगने वाले कपड़े का सही मीटर हिसाब लगा देता है।',
+          iconType: 'info',
         },
       ],
     },
@@ -356,144 +562,228 @@ const GUIDE_CHAPTERS: GuideChapter[] = [
 ];
 
 export const GuidePage: React.FC = () => {
-  const [activeChapterId, setActiveChapterId] = useState<string>('quick-start');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [language, setLanguage] = useState<Language>(() => {
+    try {
+      const saved = localStorage.getItem('factory_guide_language');
+      return saved === 'EN' || saved === 'HI' ? saved : 'HI';
+    } catch {
+      return 'HI';
+    }
+  });
 
-  const activeChapter = GUIDE_CHAPTERS.find((c) => c.id === activeChapterId) || GUIDE_CHAPTERS[0];
+  const [activeChapterId, setActiveChapterId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('factory_guide_active_chapter');
+      return saved || 'quick-start';
+    } catch {
+      return 'quick-start';
+    }
+  });
 
-  const filteredChapters = GUIDE_CHAPTERS.filter(
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSetLanguage = (lang: Language) => {
+    setLanguage(lang);
+    try {
+      localStorage.setItem('factory_guide_language', lang);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSelectChapter = (chapterId: string) => {
+    setActiveChapterId(chapterId);
+    try {
+      localStorage.setItem('factory_guide_active_chapter', chapterId);
+    } catch {
+      // ignore
+    }
+  };
+
+  const currentChapters = language === 'HI' ? GUIDE_CHAPTERS_HI : GUIDE_CHAPTERS_EN;
+
+  const filteredChapters = currentChapters.filter(
     (c) =>
       c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.subtitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.content.summary.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      {/* Hero Header */}
-      <div className="relative p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-slate-900 via-factory-900 to-indigo-950 border border-slate-800 shadow-2xl overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+  const activeChapter = currentChapters.find((c) => c.id === activeChapterId) || currentChapters[0];
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-500/20 text-primary-300 text-xs font-bold border border-primary-500/30">
-              <BookOpen className="w-3.5 h-3.5" />
-              Factory Standard Operating Procedure (SOP) & Documentation
+  return (
+    <div className="space-y-6 pb-12 max-w-7xl mx-auto">
+      {/* Top Header Card */}
+      <div className="p-6 rounded-3xl bg-gradient-to-r from-factory-950 via-slate-900 to-indigo-950/60 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <BookOpen className="w-5 h-5" />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              Factory AI Manager User Guide & Operations Manual
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Complete written tutorial on how to operate every module of the garment manufacturing software — from Size Sets & Product Master to Production, Ready Stock, Orders, and Dispatch.
-            </p>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-100 tracking-tight flex items-center gap-2">
+                {language === 'HI' ? 'फैक्ट्री AI मैनेजर — यूज़र गाइड और SOP' : 'Factory AI Manager — User Guide & SOP'}
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                  {language === 'HI' ? 'मैनुअल v2.0' : 'Manual v2.0'}
+                </span>
+              </h1>
+              <p className="text-xs text-slate-400">
+                {language === 'HI'
+                  ? 'फैक्ट्री ऑपरेशन्स, साइज सेट, प्रोडक्शन, इन्वेंटरी और डिस्पैच की संपूर्ण गाइड'
+                  : 'Complete standard operating procedures for garment manufacturing, inventory, and sales'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Language Selector & Search */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Language Switcher Button Group */}
+          <div className="flex items-center p-1 bg-factory-900 border border-slate-700/80 rounded-2xl shadow-inner">
+            <button
+              type="button"
+              onClick={() => handleSetLanguage('HI')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                language === 'HI'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              🇮🇳 हिंदी (Hindi)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetLanguage('EN')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                language === 'EN'
+                  ? 'bg-primary-600 text-white shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              🇬🇧 English
+            </button>
           </div>
 
-          <div className="w-full md:w-80 shrink-0">
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search tutorials, rules, SOPs..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-950/80 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:border-primary-500 shadow-inner"
-              />
-            </div>
+          <div className="relative min-w-[200px] flex-1 sm:flex-initial">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder={language === 'HI' ? 'गाइड में खोजें...' : 'Search tutorial topics...'}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-factory-900 border border-slate-700 text-xs text-slate-100 focus:border-primary-500 outline-none"
+            />
           </div>
         </div>
       </div>
 
-      {/* Main Guide Layout: Sidebar Index + Active Content */}
+      {/* Main Grid: Sidebar Navigation + Detailed Content */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Chapters Navigation Index */}
-        <div className="lg:col-span-4 space-y-2 sticky top-4">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2">
-            Tutorial Modules ({filteredChapters.length})
+        {/* Left Navigation Chapters List */}
+        <div className="lg:col-span-4 space-y-2">
+          <div className="text-xs font-extrabold text-slate-400 uppercase tracking-wider px-1">
+            {language === 'HI' ? 'अध्याय सूची (Chapters)' : 'Table of Contents'}
           </div>
 
-          <div className="space-y-1.5 max-h-[75vh] overflow-y-auto pr-1">
+          <div className="space-y-1.5">
             {filteredChapters.map((ch) => {
               const isActive = ch.id === activeChapter.id;
               return (
                 <button
                   key={ch.id}
-                  onClick={() => setActiveChapterId(ch.id)}
-                  className={`w-full text-left p-3 rounded-2xl border transition-all flex items-start gap-3 select-none ${
+                  onClick={() => handleSelectChapter(ch.id)}
+                  className={`w-full text-left p-3 rounded-2xl border transition-all duration-150 flex items-start gap-3 group ${
                     isActive
-                      ? 'bg-gradient-to-r from-primary-950/60 to-slate-900 border-primary-500/50 shadow-md ring-1 ring-primary-500/30'
-                      : 'bg-factory-900/60 border-slate-800/80 hover:border-slate-700 hover:bg-factory-900 text-slate-400'
+                      ? 'bg-primary-950/60 border-primary-500/80 shadow-lg shadow-primary-500/10 ring-1 ring-primary-500/30'
+                      : 'bg-factory-950/80 border-slate-800 hover:bg-factory-900/60 hover:border-slate-700'
                   }`}
                 >
-                  <div className={`p-2 rounded-xl border shrink-0 mt-0.5 ${isActive ? 'bg-primary-900/40 border-primary-500/40 text-primary-300' : 'bg-slate-950 border-slate-800'}`}>
+                  <div
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${
+                      isActive ? 'bg-primary-600/30 border border-primary-500/40' : 'bg-factory-900 border border-slate-800'
+                    }`}
+                  >
                     {ch.icon}
                   </div>
 
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-1">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         {ch.category}
                       </span>
                       {ch.badge && (
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
                           {ch.badge}
                         </span>
                       )}
                     </div>
-                    <div className={`text-xs font-bold truncate mt-0.5 ${isActive ? 'text-slate-100' : 'text-slate-300'}`}>
+                    <div className={`text-xs font-bold truncate mt-0.5 ${isActive ? 'text-primary-200' : 'text-slate-200'}`}>
                       {ch.title}
                     </div>
-                    <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
+                    <div className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
                       {ch.subtitle}
-                    </p>
+                    </div>
                   </div>
+
+                  <ChevronRight
+                    className={`w-4 h-4 shrink-0 transition-transform ${
+                      isActive ? 'text-primary-400 translate-x-0.5' : 'text-slate-600'
+                    }`}
+                  />
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Right Active Chapter Details Card */}
-        <div className="lg:col-span-8 space-y-6">
-          <Card className="p-6 sm:p-8 border-slate-800 space-y-6 bg-factory-900/90 shadow-xl">
-            {/* Chapter Header */}
-            <div className="border-b border-slate-800 pb-5 space-y-2">
+        {/* Right Active Chapter Detail Reader */}
+        <div className="lg:col-span-8">
+          <Card className="p-6 border-slate-800 bg-factory-950/90 space-y-6">
+            {/* Header of Active Chapter */}
+            <div className="pb-5 border-b border-slate-800/80 space-y-2">
               <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-primary-500/20 text-primary-300 border border-primary-500/30">
+                <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-primary-500/10 text-primary-300 border border-primary-500/30">
                   {activeChapter.category}
                 </span>
                 {activeChapter.badge && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">
                     {activeChapter.badge}
                   </span>
                 )}
               </div>
 
-              <h2 className="text-xl font-black text-white flex items-center gap-2.5">
-                {activeChapter.title}
+              <h2 className="text-xl font-black text-slate-100 flex items-center gap-2.5">
+                {activeChapter.icon}
+                <span>{activeChapter.title}</span>
               </h2>
-              <p className="text-xs sm:text-sm text-slate-400 font-medium">
+
+              <p className="text-xs text-slate-400 leading-relaxed">
                 {activeChapter.subtitle}
               </p>
             </div>
 
-            {/* Chapter Summary */}
-            <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-xs text-slate-200 leading-relaxed">
+            {/* Summary Box */}
+            <div className="p-4 rounded-2xl bg-factory-900/80 border border-slate-800 text-xs text-slate-300 leading-relaxed">
+              <strong className="text-primary-300 font-bold block mb-1">
+                {language === 'HI' ? '📌 मुख्य उद्देश्य (Summary):' : '📌 Overview:'}
+              </strong>
               {activeChapter.content.summary}
             </div>
 
-            {/* Step-by-Step Flow */}
+            {/* Step-by-Step Walkthrough */}
             {activeChapter.content.steps && (
-              <div className="space-y-3.5">
+              <div className="space-y-3">
                 <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-primary-400" />
-                  Step-by-Step Instructions
+                  <ClipboardList className="w-3.5 h-3.5 text-primary-400" />
+                  {language === 'HI' ? 'स्टेप-बाय-स्टेप गाइड (Step-by-Step)' : 'Sequential Operating Steps'}
                 </h3>
 
                 <div className="space-y-3">
                   {activeChapter.content.steps.map((st) => (
                     <div
                       key={st.step}
-                      className="p-4 rounded-2xl bg-factory-950 border border-slate-800/80 space-y-2 hover:border-slate-700 transition-all"
+                      className="p-4 rounded-2xl bg-factory-950 border border-slate-800 hover:border-slate-700 transition-all space-y-2"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2.5">
@@ -536,7 +826,7 @@ export const GuidePage: React.FC = () => {
               <div className="space-y-3">
                 <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  Core Business Rules & Specifications
+                  {language === 'HI' ? 'महत्वपूर्ण नियम और स्पेसिफिकेशन्स (Business Rules)' : 'Core Business Rules & Specifications'}
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -547,7 +837,7 @@ export const GuidePage: React.FC = () => {
                     >
                       <div className="flex items-center gap-2">
                         {rule.iconType === 'alert' ? (
-                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
                         ) : rule.iconType === 'info' ? (
                           <HelpCircle className="w-4 h-4 text-blue-400 shrink-0" />
                         ) : (
@@ -581,7 +871,7 @@ export const GuidePage: React.FC = () => {
             {activeChapter.content.faqs && (
               <div className="space-y-3 pt-2">
                 <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  Frequently Asked Questions
+                  {language === 'HI' ? 'अक्सर पूछे जाने वाले सवाल (FAQs)' : 'Frequently Asked Questions'}
                 </h3>
                 <div className="space-y-2.5">
                   {activeChapter.content.faqs.map((faq, idx) => (

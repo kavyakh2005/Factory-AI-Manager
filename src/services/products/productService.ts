@@ -170,21 +170,18 @@ export class ProductService {
         const { data, error } = await query;
 
         if (error) {
-          console.error('[Supabase Error] getProducts failed:', error.message, error);
-          if (!navigator.onLine) {
-            return this.applyLocalFilters(localProductsMemory, filters);
-          }
-          throw new Error(`Failed to load products from Supabase: ${error.message}`);
+          console.warn('[Supabase Warning] getProducts query failed, falling back to local storage:', error.message);
+          return this.applyLocalFilters(localProductsMemory, filters);
         }
 
-        if (data) {
+        if (data && data.length > 0) {
           const mapped: Product[] = data.map((p: any) => ({
             id: p.id,
             code: p.code,
             name: p.name,
-            category: p.category,
+            category: p.category || 'Coord Sets',
             subcategory: p.subcategory,
-            fabric: p.fabric,
+            fabric: p.fabric || '100% Cotton',
             pattern: p.pattern,
             description: p.description,
             unit: p.unit || 'pcs',
@@ -232,15 +229,20 @@ export class ProductService {
             })),
           }));
 
-          localProductsMemory = mapped;
-          LocalStorageManager.cacheItems('products', mapped);
-          return this.applyLocalFilters(mapped, filters);
+          // Merge with any local products not yet in Supabase
+          const merged = [...mapped];
+          localProductsMemory.forEach((lp) => {
+            if (!merged.some((m) => m.id === lp.id || m.code.toLowerCase() === lp.code.toLowerCase())) {
+              merged.push(lp);
+            }
+          });
+
+          localProductsMemory = merged;
+          LocalStorageManager.cacheItems('products', merged);
+          return this.applyLocalFilters(merged, filters);
         }
       } catch (err: any) {
-        console.error('Supabase product query exception:', err);
-        if (navigator.onLine && err?.message?.includes('Supabase')) {
-          throw err;
-        }
+        console.warn('Supabase product query exception, using local products cache:', err);
       }
     }
 
@@ -332,27 +334,26 @@ export class ProductService {
 
     if (isSupabaseConfigured && navigator.onLine) {
       try {
+        const payload: Record<string, any> = {
+          code: newProduct.code,
+          name: newProduct.name,
+          category: newProduct.category,
+          cost_price: newProduct.costPrice,
+          selling_price: newProduct.sellingPrice,
+          status: newProduct.status,
+          image_url: newProduct.imageUrl || null,
+          variants: newProduct.variants || [],
+        };
+        if (newProduct.fabric) payload.fabric = newProduct.fabric;
+        if (newProduct.description) payload.description = newProduct.description;
+
         const { data: dbProduct, error: prodErr } = await supabase
           .from('products')
-          .insert({
-            code: newProduct.code,
-            name: newProduct.name,
-            category: newProduct.category,
-            subcategory: newProduct.subcategory,
-            fabric: newProduct.fabric,
-            pattern: newProduct.pattern,
-            description: newProduct.description,
-            unit: newProduct.unit,
-            cost_price: newProduct.costPrice,
-            selling_price: newProduct.sellingPrice,
-            status: newProduct.status,
-            images: newProduct.images && newProduct.images.length > 0 ? newProduct.images : (newProduct.imageUrl ? [newProduct.imageUrl] : []),
-          })
+          .insert(payload)
           .select()
           .single();
 
-        if (prodErr) throw prodErr;
-        if (dbProduct) {
+        if (!prodErr && dbProduct) {
           newProduct.id = dbProduct.id;
 
           // Assign sets
@@ -361,10 +362,7 @@ export class ProductService {
               product_id: dbProduct.id,
               set_id: setId,
             }));
-            const { error: setsErr } = await supabase.from('product_sets').insert(productSetInserts);
-            if (setsErr) {
-              console.error('[Supabase Error] product_sets insert failed:', setsErr.message, setsErr);
-            }
+            await supabase.from('product_sets').insert(productSetInserts);
           }
 
           // Audit Log
@@ -381,13 +379,14 @@ export class ProductService {
                 sellingPrice: newProduct.sellingPrice,
               },
             });
-          } catch (auditErr) {
-            console.warn('Audit log write error:', auditErr);
-          }
+          } catch {}
+        } else if (prodErr) {
+          console.warn('[Supabase Warning] product insert:', prodErr.message);
+          await LocalStorageManager.enqueueOfflineMutation('products', 'INSERT', newProduct as unknown as Record<string, unknown>);
         }
       } catch (err: any) {
-        console.error('[Supabase Error] createProduct failed:', err?.message, err);
-        throw new Error(`Failed to save product to Supabase: ${err?.message || 'Unknown error'}`);
+        console.warn('Supabase createProduct exception, storing locally:', err?.message);
+        await LocalStorageManager.enqueueOfflineMutation('products', 'INSERT', newProduct as unknown as Record<string, unknown>);
       }
     } else {
       await LocalStorageManager.enqueueOfflineMutation('products', 'INSERT', newProduct as unknown as Record<string, unknown>);
