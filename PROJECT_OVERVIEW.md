@@ -10,14 +10,15 @@
 
 ### 1.1. Garment Industry Operational Challenges
 Garment manufacturing facilities operate under distinct operational and financial dynamics:
-- **Complex Size-Set Hierarchy**: Apparel is manufactured and sold in **Sets** containing multiple **Sizes** (e.g., *Standard Set: 38–46*, *Extra Set: 48–52*, *Kids Set: 24–32*), requiring multi-dimensional size matrices.
-- **Sequential Production Pipelines**: Work-in-progress moves across multiple stages (**Cutting ➔ Stitching ➔ Washing ➔ Finishing ➔ QC & Rejection ➔ Packing ➔ Dispatch**). Shop-floor losses or bottlenecks directly jeopardize delivery commitments.
-- **Dynamic Raw Material Consumption**: Fabric, threads, buttons, and trims must be tracked in real-time to avoid line stoppages.
-- **Financial Balances & GST**: Wholesale receivables, supplier payables, overhead vouchers, and 5% garment GST reconciliation.
-- **Shop-Floor Decision Making**: Factory owners and floor managers require instant factual answers on delayed orders, bottleneck stages, and fabric lay plan estimations.
+- **Complex Size-Set Hierarchy**: Apparel is manufactured and sold in **Sets** containing multiple **Sizes** (e.g., *Standard Set: 38–46*, *Extra Set: 48–52*, *Kids Set: 24–32*, *Alpha S–XXL*), requiring multi-dimensional size matrices.
+- **Sequential Stage-Wise Piece Flow**: Real shop-floor pieces move sequentially across 7 stages (**Planning ➔ Cutting ➔ Stitching ➔ Finishing ➔ Quality Check ➔ Packing ➔ Ready Finished Goods**). Partial work-in-progress (WIP) splits dynamically—unprocessed pieces remain in prior stages while processed pieces advance to downstream lines.
+- **Finished Goods Stock & Reservation**: Differentiating between physical inventory in warehouse bays, pieces reserved for wholesale orders, dispatchable stock, and floor replenishment requirements.
+- **Dynamic Raw Material Consumption**: Fabric rolls, threads, buttons, zippers, polybags, and trims must be tracked in real-time to avoid floor stoppages.
+- **Financial Balances & GST**: Wholesale client receivables, supplier payables, overhead vouchers, and 5% garment GST reconciliation.
+- **Floor Operations & Decision Support**: Factory owners, line supervisors, and operators require instant factual answers on delayed orders, bottleneck stages, fabric lay plan estimations, and bilingual Hindi/English SOP guidance.
 
 ### 1.2. The Solution: Factory AI Manager
-**Factory AI Manager** delivers a cloud-native, responsive ERP system tailored specifically for **Shree Raas Krishnam Creation**, unifying 17 core modules into a single real-time dashboard backed by **100% live database synchronization** and **Google Gemini RAG AI intelligence**.
+**Factory AI Manager** delivers a cloud-native, responsive ERP system tailored specifically for **Shree Raas Krishnam Creation**, unifying 18 core modules into a single real-time dashboard backed by **100% live database synchronization**, **offline-first local persistence**, and **Google Gemini RAG AI intelligence**.
 
 ---
 
@@ -34,7 +35,7 @@ Garment manufacturing facilities operate under distinct operational and financia
                                           ▼                                ▼
                               ┌────────────────────────┐      ┌────────────────────────┐
                               │ Supabase PostgreSQL 15 │      │ Local 7-Day TTL Cache  │
-                              │  - 20+ Master Tables   │      │  - Localhost Isolation │
+                              │  - 20+ Master Tables   │      │  - Unified LocalDb     │
                               │  - Row Level Security  │      │  - Auto-Purge Engine   │
                               │  - Relational FKs      │      └────────────────────────┘
                               └───────────┬────────────┘
@@ -51,7 +52,7 @@ Garment manufacturing facilities operate under distinct operational and financia
 ### 2.1. Frontend Stack
 - **Framework**: React 18 with TypeScript for end-to-end type safety.
 - **Bundler & PWA**: Vite 6 with `vite-plugin-pwa` for progressive web app installation and service worker offline caching.
-- **Styling**: Tailwind CSS with industrial dark-mode design system.
+- **Styling**: Tailwind CSS with industrial dark-mode design system (`factory-950`, `factory-900`, `factory-800`).
 - **State Management & Caching**:
   - `@tanstack/react-query`: Declarative server-state caching, automatic cache invalidation, and optimistic mutations.
   - `zustand`: Session, authentication state, and anti-tamper signature checking.
@@ -94,7 +95,7 @@ Garment manufacturing facilities operate under distinct operational and financia
 
 ---
 
-## 💻 4. Comprehensive Breakdown of All 17 Modules
+## 💻 4. Comprehensive Breakdown of All 18 Modules
 
 ### 4.1. 📊 Executive Dashboard (`/dashboard`)
 - **Real-Time KPIs**: Active Orders, Today's Finished Output (pcs), Market Receivables, Low Stock SKU alerts.
@@ -103,16 +104,19 @@ Garment manufacturing facilities operate under distinct operational and financia
 
 ### 4.2. 🛒 Garment Orders & Size Matrix (`/orders`)
 - **Wholesale Order Booking**: Multi-product, multi-set, and 2D size-matrix piece breakdown with live line rate and GST calculation.
-- **Status Progression**: `DRAFT` ➔ `CONFIRMED` ➔ `IN_PRODUCTION` ➔ `READY_FOR_DISPATCH` ➔ `COMPLETED`.
+- **Stock Reservation**: Automatically reserves finished goods ready stock; creates automated production replenishment requirements for shortages.
+- **Status Progression**: `DRAFT` ➔ `CONFIRMED` ➔ `IN_PRODUCTION` ➔ `READY_FOR_DISPATCH` ➔ `COMPLETED` / `CANCELLED`.
 - **CRUD**: Full Create, View Size Breakdown, Status Confirmation, and Safe Deletion.
 
 ### 4.3. ⚙️ Production Shop-Floor Management (`/production`)
-- **Stage Pipeline Kanban & Table**: 7-stage sequential pipeline (**Cutting, Stitching, Washing, Finishing, Quality Check, Packing, Dispatch Ready**).
-- **Floor Output & QC Logging**: Size-wise passed pieces, rejected pieces, defect categorization, and operator attribution.
-- **Delay Alerts**: Automated detection of production orders behind schedule.
+- **7-Stage Sequential Pipeline**: Planning ➔ Cutting ➔ Stitching ➔ Finishing ➔ Quality Check ➔ Packing ➔ Ready.
+- **Dynamic Multi-Stage Piece Flow (WIP Split)**: In-progress batches dynamically split across stage columns based on output passed and remaining pieces per size.
+- **Stage Output & QC Logger**: Strict stage input piece limits, size-wise good/rejected counts, 9 defect categories, and operator names.
+- **Owner 1-Click Fast-Track**: Instant QC-pass clearance to credit whole batches directly into Finished Goods Ready Stock.
+- **Safe Batch Deletion**: Delete work orders from details modal or table view with complete safety confirmation alerts.
 
-### 4.4. 📦 Raw Material & Stock Ledger (`/inventory`)
-- **Live Stock Balances**: Fabrics, Threads, Buttons, Zippers, Packaging materials, and Finished Goods.
+### 4.4. 📦 Raw Material & Finished Goods Stock Ledger (`/inventory`)
+- **Live Stock Balances**: Fabrics, Threads, Buttons, Zippers, Packaging materials, and Ready Stock finished garments.
 - **Stock Movement Modal**: Stock In (procurement/returns) and Stock Out (floor issue/sales).
 - **Immutable Ledger**: Append-only transaction log for every stock event.
 
@@ -125,7 +129,7 @@ Garment manufacturing facilities operate under distinct operational and financia
 
 ### 4.7. 👗 Products & Tech Packs (`/products`)
 - **Style Catalog**: Tech pack specifications, fabric composition, cost price, wholesale selling price, calculated gross profit margin %, and assigned sets.
-- **View Modes**: Interactive Table View and Visual Style Card Grid View.
+- **View Modes**: Interactive Table View and Visual Style Card Grid View with live ready-stock matrix inspection.
 
 ### 4.8. 📐 Sets & Sizes Master (`/sets-sizes`)
 - **Sets Configuration**: Define custom ratio groupings (Standard, Plus, Kids, Alpha).
@@ -156,11 +160,15 @@ Garment manufacturing facilities operate under distinct operational and financia
 ### 4.15. 🔔 Notifications & Alert Center (`/notifications`)
 - **Automated Alerts**: Low stock warnings, production delay alerts, uncollected receivables, and overdue delivery notices.
 
-### 4.16. ⚙️ System Settings & RBAC (`/settings`)
+### 4.16. 📖 User Guide & Factory SOP (`/guide`)
+- **Interactive Multi-Language SOP**: Instant toggle between **English 🇬🇧** and **Hindi 🇮🇳 / Hinglish** with persistent browser setting.
+- **Comprehensive Module Manuals**: Step-by-step instructions for Order booking, Production floor tracking, Stock adjustments, Fast-track completions, and AI Manager features.
+
+### 4.17. ⚙️ System Settings & RBAC (`/settings`)
 - **Enterprise Profile**: Persistent legal entity name, premises address, GST number, currency, and tax rates.
 - **Staff Directory**: Role-Based Access Control (RBAC) user management and immutable audit trails.
 
-### 4.17. 🔐 Authentication & Security (`/login`)
+### 4.18. 🔐 Authentication & Security (`/login`)
 - **Multi-Factor Protection**: Salted SHA-256 password hashing, Google Sign-In OAuth support, anti-tamper signature enforcement, and brute-force rate limiting.
 
 ---

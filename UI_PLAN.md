@@ -17,10 +17,10 @@
 |  - Orders           |                                                                           |
 |  - Production       |   - Responsive KPI Cards (1-col mobile, 2-col tablet, 4-col desktop)      |
 |  - Inventory        |   - Adaptive Size Matrices (Horizontal internal scroll / dynamic wrap)    |
-|  - Purchases        |   - 7-Stage Pipeline Kanban / Table                                       |
+|  - Purchases        |   - 7-Stage Pipeline Kanban / Table with WIP Piece Flow Split             |
 |  - Dispatch         |   - Tabular Data wrapped in internal scroll containers                    |
 |  - Products         |   - Conversational AI Shell & Executive Briefing                          |
-|  - Sets & Sizes     |                                                                           |
+|  - Sets & Sizes     |   - Bilingual SOP Guide with Step-by-Step Garment Manufacturing           |
 |  - Customers        |                                                                           |
 |  - Suppliers        |                                                                           |
 |  - Payments         |                                                                           |
@@ -28,6 +28,7 @@
 |  - Reports          |                                                                           |
 |  - AI Manager (✨)  |                                                                           |
 |  - Notifications    |                                                                           |
+|  - Guide (📖)       |                                                                           |
 |  - Settings         |                                                                           |
 +---------------------+---------------------------------------------------------------------------+
 |  [Mobile Drawer] ➔ Slides out smoothly on < 1024px screens with backdrop & auto-close on select |
@@ -61,11 +62,11 @@
 
 ---
 
-## 4. Complete Screen Specifications (All 17 Modules)
+## 4. Complete Screen Specifications (All 18 Modules)
 
 1. **Dashboard (`/dashboard`)**: KPI metric cards, AI Executive Briefing summary, live streams for recent orders and shop-floor batches.
 2. **Orders (`/orders`)**: 2D size-matrix piece booking, automatic tax and line totals, status filters, and order details view.
-3. **Production (`/production`)**: 7-stage pipeline Kanban/Table switcher, bottleneck delay alert banner, size-wise piece output and QC defect logger modal.
+3. **Production (`/production`)**: 7-stage pipeline Kanban/Table switcher, bottleneck delay alert banner, real-world Stage WIP Piece Flow Split (showing split piece quantities per stage), 1-Click Fast Track button, size-wise piece output and QC defect logger modal, and safe order deletion.
 4. **Inventory (`/inventory`)**: Live stock balance tabs (Raw Materials, WIP, Ready Finished Goods, Aging), In/Out stock adjustment modal, and immutable movement ledger.
 5. **Purchases (`/purchases`)**: Supplier procurement PO generator, line items, and dock receiving modal.
 6. **Dispatch (`/dispatch`)**: Delivery manifests, carton counts, tracking LR numbers, and transporter logs.
@@ -78,5 +79,7 @@
 13. **Reports (`/reports`)**: Executive analytics for sales, production output, inventory valuation, and cash balance with CSV export.
 14. **AI Manager (`/ai-manager`)**: Google Gemini AI reasoning engine (`gemini-3.6-flash`, `gemini-3.5-flash`), Executive Daily Briefing, Fabric Lay Plan Estimator, QC Defect Root-Cause Analyzer (100% real database logs), and Live RAG Context Inspector.
 15. **Notifications (`/notifications`)**: Real-time operational warnings for low stock, delays, and receivables.
-16. **Settings (`/settings`)**: Factory profile, GSTIN, currency, tax rates, staff RBAC directory, audit logs, and Gemini API Key configuration.
-17. **Login (`/login`)**: Centered authentication card with salted SHA-256 validation, Google Sign-In button, and Factory Owner quick-fill helper.
+16. **Interactive SOP Guide (`/guide`)**: Complete bilingual Standard Operating Procedure manual (**English** & **Hindi हिंदी**) with persistent language state, garment manufacturing stage flow visualizer, interactive step-by-step factory tutorials, and FAQ accordions.
+17. **Settings (`/settings`)**: Factory profile, GSTIN, currency, tax rates, staff RBAC directory, audit logs, and Gemini API Key configuration.
+18. **Login (`/login`)**: Centered authentication card with salted SHA-256 validation, Google Sign-In button, and Factory Owner quick-fill helper.
+

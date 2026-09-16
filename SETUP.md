@@ -75,7 +75,32 @@ Open **`http://localhost:5173`** in your browser.
 
 ---
 
-## 6. Build & Production Deployment
+## 6. Complete Application Route Sitemap (18 Modules)
+
+| Route | Module Name | Primary Purpose |
+| :--- | :--- | :--- |
+| `/login` | Authentication | Secure salted SHA-256 password & Google Sign-In |
+| `/dashboard` | Executive Command Center | Real-time KPIs, shop-floor pulse & AI briefing |
+| `/orders` | Sales Order Management | 2D Size-Matrix piece booking & auto pricing |
+| `/production` | Shop-Floor Manufacturing | 7-Stage WIP split, Fast-Track, Stage entries & Delete |
+| `/inventory` | Multi-Tier Inventory | Physical, Reserved, Ready Goods, and Raw Materials |
+| `/purchases` | Material Procurement | Supplier POs, line-items & dock receiving |
+| `/dispatch` | Shipping & Logistics | Invoices, packing manifests, cartons & LR tracking |
+| `/products` | Style & Catalog Master | Tech-pack specs, fabric details & BOM formulas |
+| `/sets-sizes` | Sizing & Set Multi-Matrix | Presets, size dimensional specs & ratio mappings |
+| `/customers` | Customer Directory | Wholesale buyers, GSTIN, credit limits & payment terms |
+| `/suppliers` | Mill & Vendor Directory | Raw material suppliers, catalogs & payment terms |
+| `/payments` | Financial Cashflow Ledger | Customer receivables & supplier disbursements |
+| `/expenses` | Factory Overhead Vouchers | Operating expense vouchers & cost-center analytics |
+| `/reports` | Executive Analytics Engine | Production efficiency, stock aging & financial exports |
+| `/ai-manager` | AI Intelligence Engine | Gemini RAG assistant, lay plan calculator & QC root-cause |
+| `/notifications` | Live Alert Hub | Stockouts, delayed batches & overdue receivables |
+| `/guide` | Interactive SOP Guide | Bilingual English/Hindi step-by-step garment manual |
+| `/settings` | Enterprise System Config | Factory profile, taxes, staff RBAC, security audit & API keys |
+
+---
+
+## 7. Build & Production Deployment
 
 ```bash
 # Build optimized production bundle with PWA service worker
@@ -83,6 +108,10 @@ npm run build
 
 # Preview production build locally
 npm run preview
+
+# Deploy to Firebase Hosting (Production Cloud)
+firebase deploy
 ```
 
-The output bundle is generated inside `dist/` with PWA service worker and manifest ready for zero-config deployment on Vercel, Netlify, Cloudflare Pages, or AWS S3/CloudFront.
+The output bundle is generated inside `dist/` with PWA service worker and manifest ready for zero-config deployment on Firebase Hosting, Vercel, Netlify, Cloudflare Pages, or AWS S3/CloudFront.
+

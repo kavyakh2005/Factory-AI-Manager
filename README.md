@@ -9,11 +9,11 @@
 
 | Document | Description |
 | :--- | :--- |
-| 📘 **[PROJECT_OVERVIEW.md](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/PROJECT_OVERVIEW.md)** | Complete master guide covering business problem, all 17 operational modules, and core features. |
+| 📘 **[PROJECT_OVERVIEW.md](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/PROJECT_OVERVIEW.md)** | Complete master guide covering business problem, all 18 operational modules, and core features. |
 | 🏛️ **[ARCHITECTURE.md](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/ARCHITECTURE.md)** | System design, garment domain hierarchy, Gemini RAG intelligence, security architecture, and offline sync. |
 | 🗄️ **[DATABASE.md](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/DATABASE.md)** | Complete PostgreSQL database schema, ER diagrams, 20+ tables, columns, relations, and constraints. |
-| 🛠️ **[SETUP.md](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/SETUP.md)** | Quickstart installation, live Supabase credentials, Gemini API key configuration, and build steps. |
-| 🎨 **[UI_PLAN.md](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/UI_PLAN.md)** | UI design system, mobile drawer navigation, responsive breakpoint strategy (320px–1920px+), and all 17 screens. |
+| 🛠️ **[SETUP.md](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/SETUP.md)** | Quickstart installation, live Supabase credentials, Gemini API key configuration, and build/deploy steps. |
+| 🎨 **[UI_PLAN.md](file:///c:/Users/Kavya%20Khandelwal/OneDrive/Desktop/Factory/AI%20Manager/UI_PLAN.md)** | UI design system, mobile drawer navigation, responsive breakpoint strategy (320px–1920px+), and all 18 screens. |
 
 ---
 
@@ -52,6 +52,9 @@ npm run check
 
 # Build optimized production bundle
 npm run build
+
+# Deploy to Firebase Hosting (optional)
+firebase deploy
 ```
 
 ---
@@ -60,6 +63,10 @@ npm run build
 
 - **100% Real Database Ground Truth**: Direct PostgreSQL CRUD operations with zero hardcoded mock/fallback data. Complete clean-slate starting state.
 - **AI Factory Intelligence Engine**: Powered by Google Gemini (`gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-flash-latest`) with live PostgreSQL RAG context, Executive Daily Briefing synthesis, Fabric & Sizing Lay Plan Calculator, and QC Defect Root-Cause Analyzer.
+- **Bilingual SOP & Factory Guide (`/guide`)**: Complete Standard Operating Procedure walkthrough available in **English** and **Hindi (हिंदी)** with persistent language selection across browser reloads.
+- **Real-World Stage WIP Piece Flow Split**: Dynamic shop-floor piece routing where only produced pieces advance to downstream stages, while unproduced pieces remain safely tracked at their current stage.
+- **1-Click Fast Track & Finished Goods Credit**: Instant single-click batch completion bypasses manual stages, updating stock balances and crediting finished goods inventory.
+- **Full Work Order Lifecycle Management**: Safe deletion of production orders with cascade cleanup across requirements, stage entries, and stock balances.
 - **Localhost Isolation & 7-Day Retention**: Local development and testing on `localhost` is isolated to browser storage with a 7-day TTL auto-purge mechanism, preventing test data pollution of the remote database.
 - **Enterprise Application Security**:
   - Web Crypto SHA-256 salted password verification.

@@ -16,18 +16,19 @@ graph TD
         UI["Responsive UI (320px–4K, Mobile Drawer, Tailwind CSS)"]
         Auth["Zustand Auth Store + Anti-Tamper Signature"]
         SecLayer["Security Layer (WebCrypto SHA-256, Rate Limiter, XSS Sanitizer)"]
-        Services["Domain Service Layer (17 Production Modules)"]
-        LocalCache["IndexedDB Local Database (7-Day TTL Engine)"]
+        Services["Domain Service Layer (18 Enterprise Modules)"]
+        LocalCache["IndexedDB Local Database (Unified 7-Day TTL Engine)"]
         PWA["Service Worker Offline Precaching (PWA)"]
         AIShell["AI Factory Manager Interface"]
+        GuideShell["Bilingual User Guide & SOP System"]
     end
 
     subgraph DualPersistence ["Dual-Mode Persistence Routing"]
-        RouteCheck{"Environment Check (isLocalhost)"}
+        RouteCheck{"Environment Check (isLocalhost / navigator.onLine)"}
     end
 
     subgraph Cloud ["Supabase Cloud (PostgreSQL 15)"]
-        PostgresDB[("PostgreSQL Database (20+ Tables)")]
+        PostgresDB[("PostgreSQL Database (20+ Master Tables)")]
         RLS["Row Level Security Policies"]
         Storage["Supabase Media / Style Images"]
     end
@@ -41,19 +42,21 @@ graph TD
     SecLayer --> Auth
     UI --> Services
     Services --> RouteCheck
-    RouteCheck -->|Production| PostgresDB
-    RouteCheck -->|Localhost Mode| LocalCache
+    RouteCheck -->|Production Cloud Sync| PostgresDB
+    RouteCheck -->|Localhost / Offline Mode| LocalCache
     AIShell --> RAGContext
     RAGContext -->|Query Live State| PostgresDB
     RAGContext -->|Grounded Context| GeminiAPI
     GeminiAPI -->|Structured AI Output| AIShell
+    GuideShell --> UI
 ```
 
 ---
 
-## 2. Garment Manufacturing Domain Hierarchy
+## 2. Garment Manufacturing Domain Hierarchy & WIP Piece Flow
 
-The data architecture strictly enforces real-world apparel manufacturing relationships:
+### 2.1. Set & Size Multi-Matrix
+Apparel styles are categorized into ratio-based sets with exact piece breakdown:
 
 ```
   ┌─────────────────────────────────────────────────────────┐
@@ -80,6 +83,16 @@ The data architecture strictly enforces real-world apparel manufacturing relatio
   │   - 46 (Chest: 46", Waist: 42", Length: 31.5", Seq: 5)  │
   └─────────────────────────────────────────────────────────┘
 ```
+
+### 2.2. Sequential Stage-Wise WIP Flow
+In real-world manufacturing, batches split dynamically across stages:
+1. **Planning (Step 1)**: Batch allocation, fabric requisition, and size breakdown planning.
+2. **Cutting (Step 2)**: Fabric roll layering and piece cutting.
+3. **Stitching (Step 3)**: Garment assembly and sewing lines. Only cut pieces move here; remaining uncut pieces stay in Cutting.
+4. **Finishing (Step 4)**: Washing, thread trimming, and steam pressing.
+5. **Quality Check (Step 5)**: Piece-by-piece inspection and defect categorization across 9 defect reasons.
+6. **Packing (Step 6)**: Tagging, folding, and carton packaging.
+7. **Ready (Step 7)**: Automatically transferred into **Finished Goods Ready Stock** for order fulfillment.
 
 ---
 
@@ -144,17 +157,18 @@ sequenceDiagram
 ```
 
 - **Salted Web Crypto Hashing**: Passwords are never stored or evaluated in plaintext.
-- **Anti-Tamper Signature**: Any manual tampering of `factory_user` in browser localStorage (e.g. changing role to `OWNER` in DevTools) triggers immediate signature validation failure and session revocation.
+- **Anti-Tamper Signature**: Any manual tampering of `factory_user` in browser localStorage triggers immediate signature validation failure and session revocation.
 - **Login Rate Limiter**: 5 consecutive failed attempts trigger a 15-minute lockout cooldown.
 - **Content Security Policy**: Strict headers in `index.html` and `vite.config.ts`.
 
 ---
 
-## 5. Localhost Isolation & 7-Day Storage Engine
+## 5. Persistence Architecture & Unified Caching
 
-- **Dual Mode**: `isLocalhost` detects `localhost`, `127.0.0.1`, or `*.localhost`.
-- **Zero Pollution**: Local development does not mutate or pollute production Supabase database tables.
-- **7-Day Retention TTL**: Local records are stamped with `_storedAt` and auto-purged upon expiration by `purgeExpiredLocalData(604800000)`.
+- **Unified LocalDb**: IndexedDB stores with automatic localStorage sync (`factory_cache_*`) guaranteeing 100% offline recovery.
+- **Localhost Isolation**: Testing on `localhost` does not mutate remote cloud tables.
+- **7-Day TTL Auto-Purge**: Stale local entries older than 7 days are automatically cleaned by `purgeExpiredLocalData()`.
+- **Smart Remote-Local Merge**: Supabase remote queries merge with locally active batches to prevent data loss across deployments.
 
 ---
 
@@ -176,4 +190,6 @@ sequenceDiagram
 | **Expenses** | Full | Full | View | View | Full | — |
 | **Reports** | Full | Full | Production | Inventory | Financial | — |
 | **AI Manager** | Full | Full | Full | Full | Full | Full |
+| **User Guide & SOP** | Full | Full | Full | Full | Full | Full |
+| **Notifications** | Full | Full | Full | Full | Full | Full |
 | **Settings** | Full | Full | View | View | View | — |

@@ -24,6 +24,8 @@ erDiagram
     ORDERS ||--o{ PRODUCTION_ORDERS : triggers
     ORDERS ||--o{ DISPATCHES : fulfills
     ORDERS ||--o{ PAYMENTS : generates
+    ORDERS ||--o{ STOCK_RESERVATIONS : reserves
+    ORDERS ||--o{ PRODUCTION_REQUIREMENTS : shortage
     
     ORDER_ITEMS }o--|| PRODUCTS : item
     ORDER_ITEMS }o--|| SETS : set
@@ -35,6 +37,7 @@ erDiagram
     PRODUCTION_ENTRIES }o--o| REJECTION_REASONS : defect
     
     PRODUCTS ||--o{ FINISHED_GOODS_STOCK : tracks
+    SETS ||--o{ FINISHED_GOODS_STOCK : set
     SIZES ||--o{ FINISHED_GOODS_STOCK : size
     
     SUPPLIERS ||--o{ PURCHASE_ORDERS : fulfills
@@ -107,8 +110,8 @@ Garment styles and tech pack specifications.
 #### `sets`
 Garment set definitions.
 - `id` (UUID, Primary Key)
-- `name` (VARCHAR(100), UNIQUE, e.g. "Standard Set", "Extra Set", "Kids Set")
-- `code` (VARCHAR(50), UNIQUE, e.g. "SET-STD", "SET-EXT")
+- `name` (VARCHAR(100), UNIQUE, e.g. "Standard Set", "Extra Set", "Kids Set", "Alpha Set")
+- `code` (VARCHAR(50), UNIQUE, e.g. "SET-STD", "SET-EXT", "SET-KIDS")
 - `type` (VARCHAR(50), DEFAULT `'ADULT'`)
 - `status` (VARCHAR(20), DEFAULT `'ACTIVE'`)
 - `created_at` / `updated_at` (TIMESTAMPTZ)
@@ -138,16 +141,35 @@ Individual dimensions.
 
 ### 2.3. Ready Stock, Orders, Production & Quality Control
 
-#### `finished_goods_stock` (Ready Finished Stock)
+#### `finished_goods_stock` (Ready Finished Goods Stock)
 - `id` (UUID, Primary Key)
 - `product_id` (UUID, FK ➔ `products.id`)
 - `set_id` (UUID, FK ➔ `sets.id`)
 - `size_id` (UUID, FK ➔ `sizes.id`)
 - `physical_quantity` (INT, DEFAULT 0)
 - `reserved_quantity` (INT, DEFAULT 0)
-- `dispatchable_quantity` (INT, GENERATED / COMPUTED: physical - reserved)
+- `dispatchable_quantity` (INT, GENERATED / COMPUTED: `physical - reserved`)
 - `movement_speed` (VARCHAR(20), `'FAST'`, `'SLOW'`, `'DEAD'`)
 - `last_movement_at` (TIMESTAMPTZ)
+
+#### `stock_reservations` (Order Allocation)
+- `id` (UUID, Primary Key)
+- `order_id` (UUID, FK ➔ `orders.id`)
+- `product_id` (UUID, FK ➔ `products.id`)
+- `set_id` (UUID, FK ➔ `sets.id`)
+- `size_id` (UUID, FK ➔ `sizes.id`)
+- `reserved_quantity` (INT, NOT NULL)
+- `status` (VARCHAR(30), `'ACTIVE'`, `'DISPATCHED'`, `'RELEASED'`)
+
+#### `production_requirements` (Shortage Replenishment)
+- `id` (UUID, Primary Key)
+- `order_id` (UUID, FK ➔ `orders.id`)
+- `product_id` (UUID, FK ➔ `products.id`)
+- `set_id` (UUID, FK ➔ `sets.id`)
+- `size_id` (UUID, FK ➔ `sizes.id`)
+- `required_quantity` (INT, NOT NULL)
+- `priority` (VARCHAR(20), `'NORMAL'`, `'HIGH'`, `'URGENT'`)
+- `status` (VARCHAR(30), `'PENDING'`, `'IN_PRODUCTION'`, `'FULFILLED'`)
 
 #### `orders`
 Wholesale customer orders.
@@ -157,8 +179,10 @@ Wholesale customer orders.
 - `order_date` / `delivery_date` (DATE)
 - `priority` (VARCHAR(20), DEFAULT `'NORMAL'`)
 - `status` (VARCHAR(30), DEFAULT `'CONFIRMED'`)
+- `fulfillment_status` (VARCHAR(30), DEFAULT `'FULLY_AVAILABLE'`)
+- `payment_status` (VARCHAR(30), DEFAULT `'UNPAID'`)
 - `total_quantity` (INT, DEFAULT 0)
-- `subtotal` / `tax_amount` / `grand_total` (NUMERIC(12,2))
+- `subtotal` / `tax_rate` / `tax_amount` / `discount_amount` / `grand_total` / `paid_amount` (NUMERIC(12,2))
 - `notes` (TEXT)
 
 #### `order_items`
@@ -169,30 +193,42 @@ Wholesale customer orders.
 - `size_id` (UUID, FK ➔ `sizes.id`)
 - `variant_id` (VARCHAR(100))
 - `quantity` (INT, NOT NULL)
-- `unit_rate` / `tax_rate` / `total_amount` (NUMERIC(10,2))
+- `unit_rate` / `tax_rate` / `line_total` (NUMERIC(10,2))
+
+#### `production_stages`
+- `id` (UUID / text ID, e.g. `'stg-1'`)
+- `name` (VARCHAR(50), `'PLANNING'`, `'CUTTING'`, `'STITCHING'`, `'FINISHING'`, `'QUALITY CHECK'`, `'PACKING'`, `'READY'`)
+- `sequence` (INT, 1 to 7)
+- `description` (TEXT)
+- `color_code` (VARCHAR(20))
+- `is_system` (BOOLEAN, DEFAULT true)
+- `status` (VARCHAR(20), DEFAULT `'ACTIVE'`)
 
 #### `production_orders`
 Shop-floor batch tracking.
 - `id` (UUID, Primary Key)
-- `production_number` (VARCHAR(100), UNIQUE, e.g. `PRD-BATCH-101`)
+- `production_number` (VARCHAR(100), UNIQUE, e.g. `PROD-2026-9448700`)
 - `order_id` (UUID, FK ➔ `orders.id`, NULLABLE for Ready Stock batches)
+- `batch_type` (VARCHAR(30), `'READY_STOCK'` | `'REPLENISHMENT'`)
 - `product_id` (UUID, FK ➔ `products.id`)
+- `variant_id` (VARCHAR(100))
 - `set_id` (UUID, FK ➔ `sets.id`)
-- `current_stage_id` (UUID, FK ➔ `production_stages.id`)
+- `current_stage_id` (UUID / text ID, FK ➔ `production_stages.id`)
 - `total_planned_qty` / `total_completed_qty` / `total_rejected_qty` (INT, DEFAULT 0)
-- `target_completion_date` (DATE)
-- `planned_sizes` (JSONB, DEFAULT `'{}'`)
-- `status` (VARCHAR(30), DEFAULT `'IN_PROGRESS'`)
+- `start_date` / `target_completion_date` / `actual_completion_date` (TIMESTAMPTZ)
+- `status` (VARCHAR(30), `'IN_PROGRESS'`, `'COMPLETED'`, `'CANCELLED'`)
+- `assigned_team` (VARCHAR(100))
+- `notes` (TEXT, encodes planned size JSON metadata `[PLAN_SIZES:{"sz-id":qty}]`)
 
 #### `production_entries`
 - `id` (UUID, Primary Key)
 - `production_order_id` (UUID, FK ➔ `production_orders.id` ON DELETE CASCADE)
-- `stage_id` (UUID, FK ➔ `production_stages.id`)
-- `size_id` (UUID, FK ➔ `sizes.id`)
+- `stage_id` (UUID / text ID, FK ➔ `production_stages.id`)
+- `size_id` (UUID / text ID, FK ➔ `sizes.id`)
 - `quantity_passed` / `quantity_rejected` (INT, DEFAULT 0)
-- `rejection_reason_id` (UUID, FK ➔ `rejection_reasons.id`)
+- `rejection_reason` / `rejection_reason_id` (TEXT)
 - `operator_name` / `notes` (TEXT)
-- `created_at` (TIMESTAMPTZ)
+- `entry_date` / `created_at` (TIMESTAMPTZ)
 
 ---
 
